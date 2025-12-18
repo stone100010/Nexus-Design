@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatar        String?
+  role          Role      @default(USER)
+  
+  // Authentication
+  password      String?
+  emailVerified DateTime?
+  
+  // Relationships
+  teamMemberships  TeamMember[]
+  ownedTeams       Team[]       @relation("TeamOwner")
+  
+  projectMemberships ProjectMember[] @relation("ProjectMemberUser")
+  ownedProjects    Project[]    @relation("ProjectOwner")
+  
+  aiGenerations    AIGeneration[] @relation("AIGenUser")
+  files            File[]       @relation("FileUser")
+  sessions         Session[]    @relation("SessionUser")
+  collabSessions   CollaborationSession[] @relation("CollabUser")
+  
+  comments         Comment[]    @relation("CommentAuthor")
+  createdVersions  Version[]    @relation("VersionCreator")
+  createdComponents Component[]  @relation("ComponentCreator")
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  USER
+  GUEST
+}
+
+// ==================== AUTH ====================
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  
+  ipAddress String?
+  userAgent String?
+  
+  user      User     @relation("SessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ==================== TEAM ====================
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  ownerId     String
+  owner       User     @relation("TeamOwner", fields: [ownerId], references: [id])
+  
+  members     TeamMember[]
+  projects    Project[]    @relation("TeamProjects")
+  components  Component[]  @relation("TeamComponents")
+  
+  settings    Json     @default("{}")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  @@index([ownerId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(EDITOR)
+  
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  joinedAt  DateTime @default(now())
+  
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+enum TeamRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// ==================== PROJECT ====================
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  ownerId     String
+  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id])
+  
+  teamId      String?
+  team        Team?    @relation("TeamProjects", fields: [teamId], references: [id])
+  
+  // Members (via team or direct)
+  members     ProjectMember[]
+  
+  thumbnail   String?
+  data        Json?
+  
+  versions    Version[] @relation("ProjectVersions")
+  comments    Comment[] @relation("ProjectComments")
+  
+  settings    Json     @default("{\"theme\": \"dark\", \"devices\": [\"iphone-14-pro\"]}")
+  
+  isPublic    Boolean  @default(false)
+  
+  aiGenerations AIGeneration[] @relation("AIGenProject")
+  collabSessions CollaborationSession[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  @@index([ownerId])
+  @@index([teamId])
+  @@index([isPublic])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      TeamRole @default(EDITOR)
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation("ProjectMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  joinedAt  DateTime @default(now())
+  
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+// ==================== VERSION ====================
+
+model Version {
+  id          String   @id @default(cuid())
+  projectId   String
+  version     Int      @default(1)
+  name        String?
+  
+  data        Json
+  
+  createdBy   String
+  creator     User     @relation("VersionCreator", fields: [createdBy], references: [id])
+  
+  message     String?
+  changes     Json?
+  
+  thumbnail   String?
+  
+  project     Project  @relation("ProjectVersions", fields: [projectId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([projectId, version])
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("versions")
+}
+
+// ==================== COMPONENT ====================
+
+model Component {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  
+  teamId      String?
+  team        Team?    @relation("TeamComponents", fields: [teamId], references: [id])
+  
+  props       Json     @default("{}")
+  styles      Json     @default("{}")
+  events      Json?
+  
+  category    String?
+  tags        String[] // 标签
+  
+  version     Int      @default(1)
+  isPublic    Boolean  @default(false)
+  
+  createdBy   String
+  creator     User     @relation("ComponentCreator", fields: [createdBy], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([teamId])
+  @@index([category])
+  @@index([createdBy])
+  @@map("components")
+}
+
+// ==================== AI GENERATION ====================
+
+model AIGeneration {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String?
+  
+  prompt      String
+  response    Json
+  model       String
+  
+  design      Json?
+  code        Json?
+  
+  tokensUsed  Int
+  cost        Float
+  
+  status      AIGenerationStatus @default(SUCCESS)
+  errorMessage String?
+  
+  user        User     @relation("AIGenUser", fields: [userId], references: [id], onDelete: Cascade)
+  project     Project? @relation("AIGenProject", fields: [projectId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("ai_generations")
+}
+
+enum AIGenerationStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+// ==================== COLLABORATION ====================
+
+model CollaborationSession {
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String
+  
+  socketId    String   @unique
+  cursor      Json?
+  selection   String[]
+  
+  isActive    Boolean  @default(true)
+  
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User     @relation("CollabUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  joinedAt    DateTime @default(now())
+  lastActive  DateTime @updatedAt
+  
+  @@index([projectId])
+  @@index([userId])
+  @@index([socketId])
+  @@map("collaboration_sessions")
+}
+
+// ==================== COMMENT ====================
+
+model Comment {
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String
+  elementId   String?
+  
+  content     String
+  x           Float?
+  y           Float?
+  
+  resolved    Boolean  @default(false)
+  
+  parentId    String?
+  replies     Comment[] @relation("CommentReplies")
+  
+  project     Project  @relation("ProjectComments", fields: [projectId], references: [id], onDelete: Cascade)
+  user        User     @relation("CommentAuthor", fields: [userId], references: [id])
+  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([projectId])
+  @@index([elementId])
+  @@map("comments")
+}
+
+// ==================== FILE ====================
+
+model File {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  url         String
+  size        Int
+  mimeType    String
+  
+  provider    StorageProvider @default(S3)
+  key         String?
+  
+  width       Int?
+  height      Int?
+  duration    Int?
+  
+  user        User     @relation("FileUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@map("files")
+}
+
+enum StorageProvider {
+  S3
+  CLOUDINARY
+  LOCAL
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  success     Boolean  @default(true)
+  error       String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

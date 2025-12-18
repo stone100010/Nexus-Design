@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus Design - Workspace</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-app: #1e1e1e;
+            --bg-panel: #2c2c2c;
+            --bg-canvas: #121212;
+            --border: #444;
+            --border-light: #555;
+            --accent: #6366f1; /* Nexus Purple */
+            --text-main: #e0e0e0;
+            --text-sub: #9e9e9e;
+            --hover: #3a3a3a;
+            --selected: #4f46e5;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', -apple-system, sans-serif; font-size: 12px; user-select: none; }
+        
+        body { background-color: var(--bg-app); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* --- UI COMPONENTS --- */
+        input { background: #111; border: 1px solid #444; color: white; padding: 4px; border-radius: 4px; outline: none; }
+        input:focus { border-color: var(--accent); }
+        
+        .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: var(--text-main); transition: 0.1s; border: none; background: transparent;}
+        .icon-btn:hover { background: var(--hover); }
+        .icon-btn.active { background: var(--accent); color: white; }
+
+        .divider { height: 1px; background: var(--border); margin: 8px 0; width: 100%; }
+        .section-title { font-weight: 700; color: var(--text-sub); margin-bottom: 8px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+
+        /* --- TOP BAR --- */
+        #top-bar { height: 48px; background: var(--bg-panel); border-bottom: 1px solid #000; display: flex; align-items: center; padding: 0 10px; justify-content: space-between; z-index: 10; }
+        .menu-logo { font-weight: 800; font-size: 14px; margin-right: 20px; color: white; display: flex; gap:10px; align-items: center;}
+        .toolbar-center { display: flex; gap: 4px; background: #222; padding: 4px; border-radius: 8px; }
+        .file-info { display: flex; flex-direction: column; align-items: center; }
+        .file-name { font-weight: 600; }
+        .file-path { color: var(--text-sub); font-size: 10px; }
+        .top-right { display: flex; align-items: center; gap: 10px; }
+        .avatar-stack { display: flex; }
+        .avatar { width: 24px; height: 24px; border-radius: 50%; background: #777; border: 2px solid var(--bg-panel); margin-left: -8px; font-size: 10px; text-align: center; line-height: 20px;}
+
+        /* --- MAIN LAYOUT --- */
+        #main-area { display: flex; flex: 1; height: calc(100vh - 48px); }
+
+        /* --- LEFT SIDEBAR (Layers) --- */
+        #sidebar-left { width: 240px; background: var(--bg-panel); border-right: 1px solid #000; display: flex; flex-direction: column; }
+        .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .tab { flex: 1; text-align: center; padding: 10px 0; cursor: pointer; font-weight: 500; color: var(--text-sub); }
+        .tab.active { color: var(--text-main); border-bottom: 2px solid var(--text-main); }
+        
+        .layer-tree { flex: 1; overflow-y: auto; padding: 10px 0; }
+        .layer-row { padding: 6px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-sub); }
+        .layer-row:hover { background: var(--hover); color: var(--text-main); }
+        .layer-row.selected { background: rgba(99, 102, 241, 0.2); color: white; border-left: 2px solid var(--accent); }
+        .layer-indent { width: 12px; } /* simple indent */
+        .layer-icon { width: 14px; text-align: center; }
+
+        /* --- CANVAS AREA --- */
+        #canvas-area { flex: 1; background: var(--bg-canvas); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* Rulers */
+        .ruler-horz { height: 24px; background: var(--bg-app); border-bottom: 1px solid var(--border); display: flex; align-items: end; padding-left: 24px; font-family: monospace; font-size: 10px; color: #666; }
+        .ruler-vert { width: 24px; background: var(--bg-app); border-right: 1px solid var(--border); position: absolute; top: 24px; bottom: 0; left: 0; }
+        
+        /* The Design Board */
+        #viewport { flex: 1; position: relative; overflow: auto; display: flex; justify-content: center; align-items: center; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 20px 20px; }
+        
+        .artboard {
+            width: 375px; height: 812px; background: white; 
+            box-shadow: 0 0 0 1px #333, 0 20px 50px rgba(0,0,0,0.5); 
+            position: relative; 
+            display: flex; flex-direction: column;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .artboard-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        .artboard-content::-webkit-scrollbar {
+            width: 3px;
+        }
+        
+        .artboard-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .artboard-content::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+        
+        /* Device Presets */
+        .artboard.iphone-14-pro { width: 375px; height: 812px; border-radius: 40px; }
+        .artboard.iphone-14 { width: 390px; height: 844px; border-radius: 40px; }
+        .artboard.android { width: 384px; height: 854px; border-radius: 20px; }
+        .artboard.ipad { width: 1024px; height: 1366px; border-radius: 20px; }
+        .artboard.desktop { width: 1440px; height: 900px; border-radius: 8px; }
+        .artboard.tablet { width: 768px; height: 1024px; border-radius: 16px; }
+        
+        /* Landscape Mode */
+        .artboard.landscape {
+            transform-origin: center center;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .artboard.iphone-14-pro.landscape { width: 812px; height: 375px; border-radius: 40px; }
+        .artboard.iphone-14.landscape { width: 844px; height: 390px; border-radius: 40px; }
+        .artboard.android.landscape { width: 854px; height: 384px; border-radius: 20px; }
+        .artboard.ipad.landscape { width: 1366px; height: 1024px; border-radius: 20px; }
+        .artboard.desktop.landscape { width: 900px; height: 1440px; border-radius: 8px; }
+        .artboard.tablet.landscape { width: 1024px; height: 768px; border-radius: 16px; }
+        
+        /* Rotation Animation */
+        @keyframes rotateDevice {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(90deg) scale(0.8); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        
+        .artboard.rotating {
+            animation: rotateDevice 0.6s ease-in-out;
+        }
+        .artboard-label { position: absolute; top: -25px; left: 0; color: var(--text-sub); font-size: 11px; }
+
+        /* Mockup Content inside Artboard (Complex) */
+        .app-status-bar { height: 44px; display: flex; justify-content: space-between; padding: 0 20px; align-items: center; font-weight: 600; color: black; font-size: 12px; }
+        .app-nav { padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .app-nav i { cursor: pointer; transition: color 0.2s ease; }
+        .app-nav i:hover { color: var(--accent); }
+        .app-h1 { font-size: 24px; font-weight: 800; color: #111; margin: 0 20px 20px; }
+        /* 银行卡容器 */
+        .cards-container {
+            margin: 0 20px 20px;
+            position: relative;
+            height: 160px;
+        }
+        
+        .app-card { 
+            height: 160px; 
+            background: linear-gradient(135deg, #6366f1, #ec4899); 
+            border-radius: 16px; 
+            padding: 20px; 
+            color: white; 
+            position: absolute; 
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            width: calc(100% - 40px);
+        }
+        
+        .app-card.card-1 {
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            z-index: 3;
+            transform: translateX(0);
+        }
+        
+        .app-card.card-2 {
+            background: linear-gradient(135deg, #10b981, #3b82f6);
+            z-index: 2;
+            transform: translateX(-10px);
+        }
+        
+        .app-card.card-3 {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            z-index: 1;
+            transform: translateX(-20px);
+        }
+        
+        .card-indicators {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+        }
+        
+        .card-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .card-dot.active {
+            background: var(--accent);
+            width: 20px;
+            border-radius: 4px;
+        }
+        
+        .card-quick-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .card-action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .card-action-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .app-card:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
+        }
+        .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 0 20px; }
+        .app-item { 
+            height: 100px; 
+            background: #f8f9fa; 
+            border-radius: 12px; 
+            position: relative;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border: 1px solid #e9ecef;
+        }
+        .app-item:hover { 
+            background: #ffffff; 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-color: var(--accent);
+        }
+        
+        .app-item-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: white;
+            margin-bottom: 8px;
+        }
+        
+        .app-item-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .app-item-subtitle {
+            font-size: 11px;
+            color: #666;
+        }
+        
+        .app-item-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        /* 交易记录区域 */
+        .transactions-section {
+            padding: 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .see-all {
+            font-size: 12px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .transaction-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+        
+        .transaction-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-size: 14px;
+            color: white;
+        }
+        
+        .transaction-details {
+            flex: 1;
+        }
+        
+        .transaction-merchant {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        
+        .transaction-date {
+            font-size: 11px;
+            color: #666;
+        }
+        
+        .transaction-amount {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .transaction-amount.positive {
+            color: #10b981;
+        }
+        
+        .transaction-amount.negative {
+            color: #ef4444;
+        }
+        
+        .app-tabbar { 
+            margin-top: auto; 
+            height: 80px; 
+            border-top: 1px solid #eee; 
+            display: flex; 
+            justify-content: space-around; 
+            align-items: center; 
+            padding-bottom: 20px; 
+            color: #aaa; 
+            font-size: 20px;
+        }
+        .app-tabbar i { 
+            cursor: pointer; 
+            transition: all 0.2s ease;
+            padding: 8px;
+            border-radius: 50%;
+        }
+        .app-tabbar i:hover { 
+            color: var(--accent); 
+            background: rgba(99, 102, 241, 0.1);
+        }
+        .app-tabbar i.active { color: var(--accent); }
+        
+        /* Selection Overlay */
+        .selection-frame {
+            position: absolute; top: 118px; left: 20px; width: 335px; height: 160px;
+            border: 2px solid var(--accent); pointer-events: none; z-index: 100;
+        }
+        .selection-handles { position: absolute; width: 6px; height: 6px; background: white; border: 1px solid var(--accent); border-radius: 1px; }
+        
+        /* --- RIGHT SIDEBAR (Properties) --- */
+        #sidebar-right { width: 280px; background: var(--bg-panel); border-left: 1px solid #000; display: flex; flex-direction: column; overflow-y: auto; }
+        .prop-panel { padding: 16px; border-bottom: 1px solid var(--border); }
+        
+        .prop-row { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; }
+        .prop-row.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .prop-label { color: var(--text-sub); }
+        .input-group { position: relative; }
+        .input-group input { width: 100%; padding-left: 20px; }
+        .input-group i { position: absolute; left: 6px; top: 6px; color: var(--text-sub); font-size: 10px; }
+
+        .align-tools { display: flex; justify-content: space-between; margin-bottom: 16px; }
+        
+        .color-chip { width: 16px; height: 16px; border-radius: 2px; border: 1px solid #555; display: inline-block; vertical-align: middle; margin-right: 8px; }
+        
+        /* 动画效果 */
+        .component-item { transition: all 0.2s ease; cursor: grab; }
+        .component-item:active { cursor: grabbing; }
+        .component-item:hover { background: rgba(99, 102, 241, 0.1); border-color: var(--accent); transform: scale(1.05); }
+        
+        .layer-row { transition: all 0.2s ease; }
+        .layer-row:hover { background: var(--hover); padding-left: 16px; }
+        
+        .prop-row { transition: all 0.2s ease; }
+        .prop-row:hover { background: rgba(255, 255, 255, 0.02); }
+        
+        .btn { transition: all 0.2s ease; }
+        .btn:active { transform: scale(0.95); }
+        
+        .icon-btn { transition: all 0.15s ease; }
+        .icon-btn:hover { transform: scale(1.1); }
+        .icon-btn:active { transform: scale(0.95); }
+        
+        /* 画布拖拽和缩放动画 */
+        .artboard { 
+            transition: box-shadow 0.3s ease, border-radius 0.3s ease; 
+            cursor: move;
+        }
+        .artboard:hover { 
+            box-shadow: 0 0 0 1px #333, 0 25px 60px rgba(0,0,0,0.6); 
+        }
+        .artboard.dragging {
+            cursor: grabbing;
+            opacity: 0.9;
+            box-shadow: 0 0 0 2px var(--accent), 0 30px 80px rgba(99, 102, 241, 0.4);
+        }
+        
+        /* 拖拽时的视觉反馈 */
+        .drag-ghost {
+            position: absolute;
+            border: 2px dashed var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        /* 选择框动画 */
+        .selection-frame { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* 工具提示 */
+        .tooltip { position: relative; }
+        .tooltip::after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+        .tooltip:hover::after { opacity: 1; }
+        
+        /* 滚动条样式 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-app); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+        
+        /* 响应式布局 */
+        @media (max-width: 1200px) {
+            #sidebar-left { width: 200px; }
+            #sidebar-right { width: 240px; }
+        }
+        
+        @media (max-width: 992px) {
+            #sidebar-left { width: 60px; }
+            #sidebar-left .tab span { display: none; }
+            #sidebar-left .section-title span { display: none; }
+            #sidebar-left .component-item div:last-child { display: none; }
+            
+            #sidebar-right { width: 200px; }
+            .prop-panel { padding: 12px; }
+        }
+        
+        @media (max-width: 768px) {
+            #top-bar { padding: 0 8px; }
+            .menu-logo span { display: none; }
+            .toolbar-center { gap: 2px; }
+            .toolbar-center .icon-btn { width: 28px; height: 28px; font-size: 12px; }
+            
+            .file-info { display: none; }
+            .avatar-stack { display: none; }
+            
+            #main-area { height: calc(100vh - 48px); }
+            
+            #sidebar-left { width: 50px; }
+            #sidebar-left .tab { font-size: 10px; padding: 8px 0; }
+            #sidebar-left .component-item { padding: 10px; }
+            #sidebar-left .component-item i { font-size: 16px; }
+            
+            #sidebar-right { width: 50px; }
+            #sidebar-right .tab { font-size: 10px; padding: 8px 0; }
+            #sidebar-right .prop-panel { display: none !important; }
+            
+            .artboard { width: 300px; height: 600px; }
+            
+            .ruler-horz { padding-left: 50px; font-size: 8px; }
+            .ruler-vert { width: 50px; }
+        }
+        
+        @media (max-width: 480px) {
+            #top-bar { height: 40px; }
+            #main-area { height: calc(100vh - 40px); }
+            
+            .toolbar-center { display: none; }
+            
+            #sidebar-left { display: none; }
+            #sidebar-right { display: none; }
+            
+            .artboard { width: 280px; height: 560px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="menu-logo">
+            <i class="fas fa-bars"></i>
+            <span style="color: var(--accent);"><i class="fas fa-layer-group"></i> Nexus Design</span>
+        </div>
+        
+        <div class="toolbar-center">
+            <button class="icon-btn active"><i class="fas fa-mouse-pointer"></i></button>
+            <button class="icon-btn"><i class="fas fa-vector-square"></i></button>
+            <button class="icon-btn"><i class="fas fa-pen-nib"></i></button>
+            <button class="icon-btn"><i class="fas fa-font"></i></button>
+            <button class="icon-btn"><i class="far fa-comment-dots"></i></button>
+            <div style="width: 1px; background: #444; height: 20px; margin: 0 4px;"></div>
+            
+            <!-- Device Switcher -->
+            <div style="display: flex; align-items: center; gap: 8px; background: #333; padding: 4px 8px; border-radius: 6px;">
+                <i class="fas fa-mobile-alt" style="color: var(--accent); font-size: 14px;"></i>
+                <select id="device-selector" style="background: #333; border: 1px solid #555; color: #e0e0e0; font-size: 12px; outline: none; cursor: pointer; padding: 2px 4px; border-radius: 4px;">
+                    <option value="iphone-14-pro">iPhone 14 Pro</option>
+                    <option value="iphone-14">iPhone 14</option>
+                    <option value="android">Android</option>
+                    <option value="ipad">iPad Pro</option>
+                    <option value="desktop">Desktop</option>
+                    <option value="tablet">Tablet</option>
+                </select>
+            </div>
+            
+            <!-- Screen Rotation Button -->
+            <button id="rotate-screen" class="icon-btn" style="background: #333; color: #e0e0e0; width: auto; padding: 0 8px;" title="Rotate Screen">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            
+            <div style="width: 1px; background: #444; height: 20px; margin: 0 4px;"></div>
+            <button class="icon-btn" style="color: var(--accent); width: auto; padding: 0 8px; gap: 5px; font-weight: 600;">
+                <i class="fas fa-sparkles"></i> AI
+            </button>
+        </div>
+
+        <div class="top-right">
+            <div class="file-info">
+                <span class="file-name">E-Commerce App V2</span>
+                <span class="file-path">Team Projects / Mobile</span>
+            </div>
+            <div class="avatar-stack">
+                <div class="avatar" style="background:#f56565;">J</div>
+                <div class="avatar" style="background:#48bb78;">M</div>
+            </div>
+            <button style="background: var(--accent); border: none; color: white; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Share</button>
+            <button class="icon-btn"><i class="fas fa-play"></i></button>
+        </div>
+    </div>
+
+    <div id="main-area">
+        
+        <div id="sidebar-left">
+            <div class="sidebar-tabs">
+                <div class="tab active">Components</div>
+                <div class="tab">Layers</div>
+                <div class="tab">Pages</div>
+            </div>
+            
+            <!-- Components Panel -->
+            <div style="padding: 15px; border-bottom: 1px solid var(--border);">
+                <input type="text" placeholder="Search components..." style="width: 100%; background: #1a1a1a; border: 1px solid #444; color: white; padding: 8px; border-radius: 6px; font-size: 12px;">
+            </div>
+            
+            <div style="padding: 15px;">
+                <div class="section-title">
+                    <i class="fas fa-star" style="color: #fbbf24;"></i> Common Components
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-square" style="font-size: 20px; color: var(--accent); margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">Button</div>
+                    </div>
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-font" style="font-size: 20px; color: var(--accent); margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">Text</div>
+                    </div>
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-image" style="font-size: 20px; color: var(--accent); margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">Image</div>
+                    </div>
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-list" style="font-size: 20px; color: var(--accent); margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">List</div>
+                    </div>
+                </div>
+                
+                <div class="section-title">
+                    <i class="fas fa-mobile-alt" style="color: #10b981;"></i> Mobile Components
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-bars" style="font-size: 20px; color: #10b981; margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">Navbar</div>
+                    </div>
+                    <div class="component-item" style="background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer;">
+                        <i class="fas fa-th" style="font-size: 20px; color: #10b981; margin-bottom: 5px;"></i>
+                        <div style="font-size: 10px;">Grid</div>
+                    </div>
+                </div>
+                
+                <div class="section-title">
+                    <i class="fas fa-sparkles" style="color: #ec4899;"></i> AI Components
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(99, 102, 241, 0.1)); border: 1px solid rgba(236, 72, 153, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 15px; cursor: pointer;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-magic" style="color: #ec4899; font-size: 16px;"></i>
+                        <div>
+                            <div style="font-size: 12px; font-weight: 600;">Smart Card</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">AI-generated adaptive card</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 图层面板（隐藏状态） -->
+            <div class="layer-tree" style="display: none;">
+                <div class="layer-row">
+                    <span class="layer-icon"><i class="fas fa-mobile-alt"></i></span>
+                    <span>Home Screen</span>
+                    <span style="margin-left: auto;"><i class="fas fa-lock" style="font-size: 10px; color:#555"></i></span>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-indent"></div>
+                    <span class="layer-icon"><i class="fas fa-ruler-horizontal"></i></span>
+                    <span>Status Bar</span>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-indent"></div>
+                    <span class="layer-icon"><i class="fas fa-font"></i></span>
+                    <span>Header Title</span>
+                </div>
+                <div class="layer-row selected">
+                    <div class="layer-indent"></div>
+                    <span class="layer-icon"><i class="fas fa-square"></i></span>
+                    <span>Credit Card (Group)</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="canvas-area">
+            <div class="ruler-horz">
+                <span style="margin-right: 50px;">0</span>
+                <span style="margin-right: 50px;">100</span>
+                <span style="margin-right: 50px;">200</span>
+                <span style="margin-right: 50px; color: var(--accent);">375</span>
+                <span style="margin-right: 50px;">500</span>
+            </div>
+            <div class="ruler-vert"></div>
+            
+            <div id="viewport">
+                <div class="artboard">
+                    <div class="artboard-label">iPhone 14 Pro - Home</div>
+                    
+                    <div class="app-status-bar">
+                        <span>8:08</span>
+                        <span><i class="fas fa-signal"></i> <i class="fas fa-wifi"></i> <i class="fas fa-battery-full"></i></span>
+                    </div>
+                    
+                    <div class="app-nav">
+                        <i class="fas fa-bars"></i>
+                        <div style="width: 32px; height: 32px; background: #ddd; border-radius: 50%; position: relative;">
+                            <div style="position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; border: 2px solid white;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="artboard-content">
+                        <!-- 通知横幅 -->
+                        <div style="margin: 10px 20px; background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: 8px; padding: 10px 15px; border-left: 3px solid #f59e0b;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fas fa-bell" style="color: #d97706; font-size: 14px;"></i>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 12px; font-weight: 600; color: #92400e;">Special Offer!</div>
+                                    <div style="font-size: 11px; color: #78350f;">Get 2% cashback on all purchases this weekend</div>
+                                </div>
+                                <i class="fas fa-times" style="color: #92400e; font-size: 12px; cursor: pointer;"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- 资产概览横幅 -->
+                        <div style="margin: 0 20px 15px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-radius: 12px; padding: 15px; border: 1px solid #bbf7d0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-size: 12px; color: #166534; margin-bottom: 4px;">Total Net Worth</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: #15803d;">$166,880.00</div>
+                                    <div style="display: flex; gap: 15px; margin-top: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 4px;">
+                                            <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></div>
+                                            <span style="font-size: 11px; color: #166534;">Investment: +$85,680</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 4px;">
+                                            <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></div>
+                                            <span style="font-size: 11px; color: #166534;">Savings: +$28,750</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="width: 60px; height: 40px; background: linear-gradient(135deg, #22c55e, #16a34a); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-rocket" style="color: white; font-size: 16px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="app-h1">My Wallet</div>
+                        
+                        <!-- 银行卡轮播 -->
+                        <div class="cards-container">
+                            <div class="app-card card-1">
+                                <div style="font-size: 12px; opacity: 0.8;">Total Balance</div>
+                                <div style="font-size: 28px; font-weight: 700; margin-top: 5px;">$12,450.00</div>
+                                <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Credit Limit: $20,000</div>
+                                <div style="position: absolute; bottom: 20px; left: 20px; font-family: monospace;">**** 4829</div>
+                                <div style="position: absolute; bottom: 20px; right: 20px;"><i class="fab fa-cc-visa" style="font-size: 24px;"></i></div>
+                                <div class="card-quick-actions">
+                                    <span class="card-action-btn">Payment</span>
+                                    <span class="card-action-btn">Transfer</span>
+                                    <span class="card-action-btn">Details</span>
+                                </div>
+                            </div>
+                            
+                            <div class="app-card card-2">
+                                <div style="font-size: 12px; opacity: 0.8;">Savings Account</div>
+                                <div style="font-size: 28px; font-weight: 700; margin-top: 5px;">$28,750.00</div>
+                                <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">APY: 2.5%</div>
+                                <div style="position: absolute; bottom: 20px; left: 20px; font-family: monospace;">**** 9182</div>
+                                <div style="position: absolute; bottom: 20px; right: 20px;"><i class="fab fa-cc-mastercard" style="font-size: 24px;"></i></div>
+                                <div class="card-quick-actions">
+                                    <span class="card-action-btn">Deposit</span>
+                                    <span class="card-action-btn">Withdraw</span>
+                                    <span class="card-action-btn">Details</span>
+                                </div>
+                            </div>
+                            
+                            <div class="app-card card-3">
+                                                        <div style="font-size: 12px; opacity: 0.8;">Investment Account</div>
+                                                        <div style="font-size: 28px; font-weight: 700; margin-top: 5px;">$125,680.00</div>
+                                                        <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">+28.7% YTD 🚀</div>
+                                                        <div style="position: absolute; bottom: 20px; left: 20px; font-family: monospace;">**** 7264</div>
+                                                        <div style="position: absolute; bottom: 20px; right: 20px;"><i class="fas fa-chart-line" style="font-size: 24px;"></i></div>
+                                                        <div class="card-quick-actions">
+                                                            <span class="card-action-btn">Buy</span>
+                                                            <span class="card-action-btn">Sell</span>
+                                                            <span class="card-action-btn">Portfolio</span>
+                                                        </div>
+                                                    </div>                            
+                            <div class="card-indicators">
+                                <div class="card-dot active"></div>
+                                <div class="card-dot"></div>
+                                <div class="card-dot"></div>
+                            </div>
+                        </div>
+
+                        <div class="app-grid">
+                            <div class="app-item">
+                                <div class="app-item-icon" style="background: linear-gradient(135deg, #3b82f6, #1e40af);">
+                                    <i class="fas fa-exchange-alt"></i>
+                                </div>
+                                <div>
+                                    <div class="app-item-title">Transfer</div>
+                                    <div class="app-item-subtitle">Quick transfer</div>
+                                </div>
+                            </div>
+                            
+                            <div class="app-item">
+                                                        <div class="app-item-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+                                                            <i class="fas fa-chart-line"></i>
+                                                        </div>
+                                                        <div>
+                                                            <div class="app-item-title">Invest</div>
+                                                            <div class="app-item-subtitle">+28.7% YTD 🔥</div>
+                                                        </div>
+                                                    </div>                            
+                            <div class="app-item">
+                                <div class="app-item-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                                    <i class="fas fa-ticket-alt"></i>
+                                </div>
+                                <div>
+                                    <div class="app-item-title">Vouchers</div>
+                                    <div class="app-item-subtitle">5 available</div>
+                                </div>
+                                <div class="app-item-badge">NEW</div>
+                            </div>
+                            
+                            <div class="app-item">
+                                <div class="app-item-icon" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
+                                    <i class="fas fa-file-invoice-dollar"></i>
+                                </div>
+                                <div>
+                                    <div class="app-item-title">Bills</div>
+                                    <div class="app-item-subtitle">3 due soon</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 最近交易记录 -->
+                        <div class="transactions-section">
+                            <div class="section-header">
+                                <div class="section-title">Recent Transactions</div>
+                                <a href="#" class="see-all">See All</a>
+                            </div>
+                            
+                            <div class="transaction-item">
+                                <div class="transaction-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                                    <i class="fas fa-shopping-cart"></i>
+                                </div>
+                                <div class="transaction-details">
+                                    <div class="transaction-merchant">Amazon Purchase</div>
+                                    <div class="transaction-date">Today, 2:30 PM</div>
+                                </div>
+                                <div class="transaction-amount negative">-$89.99</div>
+                            </div>
+                            
+                            <div class="transaction-item">
+                                                        <div class="transaction-icon" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                                            <i class="fas fa-briefcase"></i>
+                                                        </div>
+                                                        <div class="transaction-details">
+                                                            <div class="transaction-merchant">Salary Deposit</div>
+                                                            <div class="transaction-date">Yesterday, 9:00 AM</div>
+                                                        </div>
+                                                        <div class="transaction-amount positive">+$3,500.00</div>
+                                                    </div>
+                                                    
+                                                    <div class="transaction-item">
+                                                        <div class="transaction-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+                                                            <i class="fas fa-coins"></i>
+                                                        </div>
+                                                        <div class="transaction-details">
+                                                            <div class="transaction-merchant">Investment Returns</div>
+                                                            <div class="transaction-date">Dec 15, 10:30 AM</div>
+                                                        </div>
+                                                        <div class="transaction-amount positive">+$12,450.00</div>
+                                                    </div>                            
+                            <div class="transaction-item">
+                                <div class="transaction-icon" style="background: linear-gradient(135deg, #3b82f6, #1e40af);">
+                                    <i class="fas fa-gas-pump"></i>
+                                </div>
+                                <div class="transaction-details">
+                                    <div class="transaction-merchant">Shell Gas Station</div>
+                                    <div class="transaction-date">Dec 14, 6:15 PM</div>
+                                </div>
+                                <div class="transaction-amount negative">-$45.00</div>
+                            </div>
+                            
+                            <div class="transaction-item">
+                                <div class="transaction-icon" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
+                                    <i class="fas fa-utensils"></i>
+                                </div>
+                                <div class="transaction-details">
+                                    <div class="transaction-merchant">Starbucks Coffee</div>
+                                    <div class="transaction-date">Dec 14, 8:45 AM</div>
+                                </div>
+                                <div class="transaction-amount negative">-$12.50</div>
+                            </div>
+                        </div>
+                        
+                        <div class="app-tabbar">
+                            <i class="fas fa-home" style="color: black;"></i>
+                            <i class="fas fa-chart-pie"></i>
+                            <i class="fas fa-wallet"></i>
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+
+                    <div class="selection-frame">
+                        <div class="selection-handles" style="top:-3px; left:-3px;"></div>
+                        <div class="selection-handles" style="top:-3px; right:-3px;"></div>
+                        <div class="selection-handles" style="bottom:-3px; left:-3px;"></div>
+                        <div class="selection-handles" style="bottom:-3px; right:-3px;"></div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div id="sidebar-right">
+            <div class="sidebar-tabs">
+                <div class="tab active">Design</div>
+                <div class="tab">Code</div>
+                <div class="tab">AI Assistant</div>
+                <div class="tab">Collaborate</div>
+            </div>
+            
+            <div class="prop-panel">
+                <div class="align-tools">
+                    <button class="icon-btn"><i class="fas fa-align-left"></i></button>
+                    <button class="icon-btn"><i class="fas fa-align-center"></i></button>
+                    <button class="icon-btn"><i class="fas fa-align-right"></i></button>
+                    <button class="icon-btn"><i class="fas fa-align-justify"></i></button>
+                    <button class="icon-btn"><i class="fas fa-sort-amount-up"></i></button>
+                    <button class="icon-btn"><i class="fas fa-sort-amount-down"></i></button>
+                </div>
+                
+                <div class="prop-row grid-2">
+                    <div class="input-group">
+                        <i class="fas fa-arrows-alt-h"></i> <input type="text" value="20">
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-arrows-alt-v"></i> <input type="text" value="118">
+                    </div>
+                    <div class="input-group">
+                        <span style="position:absolute; left:6px; top:6px; font-size:10px; color:#999;">W</span> <input type="text" value="335">
+                    </div>
+                    <div class="input-group">
+                        <span style="position:absolute; left:6px; top:6px; font-size:10px; color:#999;">H</span> <input type="text" value="160">
+                    </div>
+                </div>
+            </div>
+
+            <div class="prop-panel">
+                <div class="section-title">Layer</div>
+                <div class="prop-row">
+                    <span class="prop-label"><i class="fas fa-adjust"></i> Pass Through</span>
+                    <span class="prop-label">100%</span>
+                </div>
+            </div>
+
+            <div class="prop-panel">
+                <div class="section-title">Fill <span>+</span></div>
+                <div class="prop-row">
+                    <div style="display:flex; align-items:center;">
+                        <span class="color-chip" style="background: linear-gradient(135deg, #6366f1, #ec4899);"></span>
+                        <span>Linear Gradient</span>
+                    </div>
+                    <span><i class="fas fa-eye"></i></span>
+                </div>
+            </div>
+
+            <div class="prop-panel">
+                <div class="section-title">Effects <span>+</span></div>
+                <div class="prop-row">
+                    <span><i class="fas fa-sun"></i> Drop Shadow</span>
+                    <span><i class="fas fa-cog"></i></span>
+                </div>
+            </div>
+            
+            <div class="prop-panel" style="background: #252528; border-top: 2px solid var(--accent);">
+                <div class="section-title" style="color: var(--accent);">
+                    <i class="fab fa-weixin"></i> WeChat Settings
+                </div>
+                <div class="divider"></div>
+                
+                <div class="prop-row" style="margin-top:10px;">
+                    <span class="prop-label">Component</span>
+                    <select style="background:#111; color:white; border:1px solid #444; border-radius:4px; padding:2px;">
+                        <option>view</option>
+                        <option>scroll-view</option>
+                        <option>swiper</option>
+                    </select>
+                </div>
+                
+                <div class="prop-row">
+                    <span class="prop-label">Class Name</span>
+                    <input type="text" value="card-container" style="width: 100px;">
+                </div>
+
+                <div class="prop-row" style="margin-top:10px;">
+                    <span class="prop-label">Bind Tap</span>
+                    <input type="text" value="onCardClick" style="width: 100px; color: #a5b4fc;">
+                </div>
+                
+                <div style="margin-top: 10px; font-family: monospace; font-size: 10px; color: #666; background: #111; padding: 8px; border-radius: 4px;">
+                    &lt;view class="card..."&gt;
+                </div>
+            </div>
+
+            <!-- Code Preview Panel (hidden by default) -->
+            <div style="display: none;">
+                <div class="prop-panel">
+                    <div class="section-title">Code Generation Settings</div>
+                    <div class="prop-row">
+                        <span class="prop-label">Target Platform</span>
+                        <select style="background:#111; color:white; border:1px solid #444; border-radius:4px; padding:4px; width: 100px;">
+                            <option>React</option>
+                            <option>Vue</option>
+                            <option>Angular</option>
+                            <option>Flutter</option>
+                        </select>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">Code Style</span>
+                        <select style="background:#111; color:white; border:1px solid #444; border-radius:4px; padding:4px; width: 100px;">
+                            <option>JavaScript</option>
+                            <option>TypeScript</option>
+                            <option>Sass</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="prop-panel">
+                    <div class="section-title">Generated Code</div>
+                    <div style="background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 10px; color: #a5b4fc; line-height: 1.4; max-height: 300px; overflow-y: auto;">
+&lt;!-- React Component --&gt;<br>
+&lt;div className="card-container"&gt;<br>
+&nbsp;&nbsp;&lt;div className="card-bg"&gt;&lt;/div&gt;<br>
+&nbsp;&nbsp;&lt;div className="card-content"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;span className="balance"&gt;$12,450.00&lt;/span&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;span className="card-number"&gt;**** 4829&lt;/span&gt;<br>
+&nbsp;&nbsp;&lt;/div&gt;<br>
+&nbsp;&nbsp;&lt;div className="card-logo"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;img src="/assets/visa.png" /&gt;<br>
+&nbsp;&nbsp;&lt;/div&gt;<br>
+&lt;/div&gt;<br><br>
+
+&lt;!-- CSS Styles --&gt;<br>
+.card-container {<br>
+&nbsp;&nbsp;width: 335px;<br>
+&nbsp;&nbsp;height: 160px;<br>
+&nbsp;&nbsp;background: linear-gradient(135deg, #6366f1, #ec4899);<br>
+&nbsp;&nbsp;border-radius: 16px;<br>
+&nbsp;&nbsp;padding: 20px;<br>
+&nbsp;&nbsp;position: relative;<br>
+}
+                    </div>
+                    <div style="margin-top: 10px; display: flex; gap: 8px;">
+                        <button class="icon-btn" style="background: var(--accent); color: white;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button class="icon-btn" style="background: var(--accent); color: white;">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="icon-btn">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AI Assistant Panel (hidden by default) -->
+            <div style="display: none;">
+                <div class="prop-panel">
+                    <div class="section-title" style="color: var(--accent);">
+                        <i class="fas fa-sparkles"></i> AI Design Suggestions
+                    </div>
+                    <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1)); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                        <div style="font-size: 12px; margin-bottom: 10px;">💡 Smart Suggestions</div>
+                        <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                            Detected optimization opportunities for current card component:<br>
+                            • Add shadow effects to enhance depth perception<br>
+                            • Include micro-animations for better interaction<br>
+                            • Use brand colors for consistent visual style
+                        </div>
+                        <button style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 10px; margin-top: 10px;">
+                            Apply Suggestions
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="prop-panel">
+                    <div class="section-title">AI Chat</div>
+                    <div style="background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 200px; overflow-y: auto; font-size: 11px;">
+                        <div style="margin-bottom: 10px;">
+                            <div style="color: var(--accent); font-weight: 600;">AI Assistant:</div>
+                            <div style="color: var(--text-muted);">Hello! I can help you optimize designs, generate code, or provide creative suggestions.</div>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <div style="color: #10b981; font-weight: 600;">You:</div>
+                            <div style="color: var(--text-muted);">Help me make this card more modern</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <input type="text" placeholder="Type your request..." style="flex: 1; background: #111; border: 1px solid #444; color: white; padding: 6px; border-radius: 4px; font-size: 11px;">
+                        <button class="icon-btn" style="background: var(--accent); color: white;">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Collaboration Panel (hidden by default) -->
+            <div style="display: none;">
+                <div class="prop-panel">
+                    <div class="section-title">
+                        <i class="fas fa-users"></i> Team Members
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 32px; height: 32px; background: #f56565; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">J</div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; font-weight: 600;">John Doe</div>
+                                <div style="font-size: 10px; color: #10b981;">● Editing now</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 32px; height: 32px; background: #48bb78; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">M</div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; font-weight: 600;">Mary Smith</div>
+                                <div style="font-size: 10px; color: #10b981;">● Viewing</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 32px; height: 32px; background: #4299e1; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">W</div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; font-weight: 600;">Will Brown</div>
+                                <div style="font-size: 10px; color: #666;">5 min ago</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="prop-panel">
+                    <div class="section-title">
+                        <i class="fas fa-comments"></i> Comments
+                    </div>
+                    <div style="background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 150px; overflow-y: auto;">
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                <div style="width: 20px; height: 20px; background: #f56565; border-radius: 50%; font-size: 10px; color: white; display: flex; align-items: center; justify-content: center;">J</div>
+                                <span style="font-size: 11px; font-weight: 600;">John</span>
+                                <span style="font-size: 9px; color: var(--text-muted);">2 min ago</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-muted);">Great color combination on this card!</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="prop-panel">
+                    <div class="section-title">
+                        <i class="fas fa-history"></i> Version History
+                    </div>
+                    <div style="font-size: 11px;">
+                        <div style="padding: 8px 0; border-bottom: 1px solid #333;">
+                            <div style="color: white;">v2.3 - Current version</div>
+                            <div style="color: var(--text-muted); font-size: 10px;">Mary Smith · 10 min ago</div>
+                        </div>
+                        <div style="padding: 8px 0; border-bottom: 1px solid #333;">
+                            <div style="color: var(--text-muted);">v2.2</div>
+                            <div style="color: var(--text-muted); font-size: 10px;">John Doe · 1 hour ago</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    // 标签页切换功能
+    document.querySelectorAll('.sidebar-tabs .tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const parent = this.closest('.sidebar-tabs');
+            const tabs = parent.querySelectorAll('.tab');
+            const index = Array.from(tabs).indexOf(this);
+            
+            // 切换标签样式
+            tabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            // 切换内容面板
+            const sidebar = this.closest('#sidebar-left, #sidebar-right');
+            const panels = sidebar.querySelectorAll('.prop-panel, .layer-tree, > div > div');
+            
+            if (sidebar.id === 'sidebar-left') {
+                // 左侧边栏切换
+                const contentPanels = sidebar.querySelectorAll('.layer-tree, > div > div');
+                contentPanels.forEach(panel => panel.style.display = 'none');
+                
+                if (index === 0) {
+                    sidebar.querySelector('> div > div').style.display = 'block';
+                } else if (index === 1) {
+                    sidebar.querySelector('.layer-tree').style.display = 'block';
+                }
+            } else {
+                // 右侧边栏切换
+                const contentPanels = sidebar.querySelectorAll('div[style*="display: none"], div[style*="display: block"]');
+                const allPanels = Array.from(sidebar.children).filter(child => 
+                    child.style.display === 'none' || child.style.display === 'block' || !child.style.display
+                );
+                
+                allPanels.forEach((panel, i) => {
+                    if (i === 0) return; // 跳过标签栏
+                    panel.style.display = i === index + 1 ? 'block' : 'none';
+                });
+            }
+        });
+    });
+    
+    // 组件拖拽到画板功能
+    document.querySelectorAll('.component-item').forEach(item => {
+        let isDraggingComponent = false;
+        let dragClone = null;
+        
+        item.addEventListener('mousedown', function(e) {
+            isDraggingComponent = true;
+            
+            // 创建拖拽克隆
+            dragClone = this.cloneNode(true);
+            dragClone.style.position = 'fixed';
+            dragClone.style.zIndex = '10000';
+            dragClone.style.pointerEvents = 'none';
+            dragClone.style.opacity = '0.8';
+            dragClone.style.transform = 'scale(0.8)';
+            document.body.appendChild(dragClone);
+            
+            // 更新克隆位置
+            function updateClonePosition(e) {
+                if (isDraggingComponent && dragClone) {
+                    dragClone.style.left = (e.clientX - 25) + 'px';
+                    dragClone.style.top = (e.clientY - 25) + 'px';
+                }
+            }
+            
+            document.addEventListener('mousemove', updateClonePosition);
+            
+            // 清理函数
+            function cleanup() {
+                if (dragClone) {
+                    dragClone.remove();
+                    dragClone = null;
+                }
+                document.removeEventListener('mousemove', updateClonePosition);
+                document.removeEventListener('mouseup', cleanup);
+                isDraggingComponent = false;
+            }
+            
+            document.addEventListener('mouseup', cleanup);
+            
+            // 检查是否拖到画板上
+            document.addEventListener('mouseup', function(e) {
+                if (isDraggingComponent) {
+                    const artboardRect = artboard.getBoundingClientRect();
+                    if (e.clientX >= artboardRect.left && e.clientX <= artboardRect.right &&
+                        e.clientY >= artboardRect.top && e.clientY <= artboardRect.bottom) {
+                        // 添加组件到画板
+                        addComponentToArtboard(item);
+                    }
+                }
+            });
+            
+            e.preventDefault();
+        });
+        
+        // 点击反馈
+        item.addEventListener('click', function() {
+            this.style.background = 'rgba(99, 102, 241, 0.2)';
+            this.style.borderColor = 'var(--accent)';
+            setTimeout(() => {
+                this.style.background = '#1a1a1a';
+                this.style.borderColor = '#444';
+            }, 300);
+        });
+    });
+    
+    // 添加组件到画板
+    function addComponentToArtboard(componentItem) {
+        const componentName = componentItem.querySelector('div').textContent;
+        
+        // 创建视觉反馈
+        const feedback = document.createElement('div');
+        feedback.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--accent);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 10001;
+            animation: fadeInOut 2s ease;
+        `;
+        feedback.textContent = `${componentName} added to artboard`;
+        document.body.appendChild(feedback);
+        
+        // 添加淡入淡出动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+                50% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        setTimeout(() => {
+            feedback.remove();
+            style.remove();
+        }, 2000);
+        
+        // 在画板上添加视觉提示
+        const indicator = document.createElement('div');
+        indicator.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(99, 102, 241, 0.1);
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+            padding: 10px 20px;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 600;
+            pointer-events: none;
+            z-index: 10;
+        `;
+        indicator.textContent = `${componentName} Preview`;
+        artboard.appendChild(indicator);
+        
+        setTimeout(() => {
+            indicator.style.transition = 'opacity 0.5s ease';
+            indicator.style.opacity = '0';
+            setTimeout(() => indicator.remove(), 500);
+        }, 1500);
+    }
+    
+    // AI建议应用按钮
+    document.addEventListener('click', function(e) {
+        if (e.target.textContent === '应用建议') {
+            e.target.textContent = '已应用';
+            e.target.style.background = '#10b981';
+        }
+    });
+    
+    // 代码复制功能
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.icon-btn')?.querySelector('.fa-copy')) {
+            const btn = e.target.closest('.icon-btn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            btn.style.background = '#10b981';
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.style.background = 'var(--accent)';
+            }, 2000);
+        }
+    });
+    
+    // 添加工具提示
+    document.querySelectorAll('.icon-btn').forEach(btn => {
+        const icon = btn.querySelector('i');
+        if (icon) {
+            const iconClass = icon.className;
+            let tooltip = '';
+            
+            if (iconClass.includes('mouse-pointer')) tooltip = '选择工具';
+            if (iconClass.includes('vector-square')) tooltip = '矩形工具';
+            if (iconClass.includes('pen-nib')) tooltip = '画笔工具';
+            if (iconClass.includes('font')) tooltip = '文本工具';
+            if (iconClass.includes('comment-dots')) tooltip = '评论工具';
+            if (iconClass.includes('sparkles')) tooltip = 'AI助手';
+            if (iconClass.includes('play')) tooltip = '预览';
+            
+            if (tooltip) {
+                btn.classList.add('tooltip');
+                btn.setAttribute('data-tooltip', tooltip);
+            }
+        }
+    });
+    
+    // 画布缩放功能
+    let scale = 1;
+    document.addEventListener('wheel', function(e) {
+        if (e.ctrlKey && e.target.closest('#viewport')) {
+            e.preventDefault();
+            scale += e.deltaY * -0.001;
+            scale = Math.min(Math.max(0.5, scale), 2);
+            const artboard = document.querySelector('.artboard');
+            if (artboard) {
+                artboard.style.transform = `scale(${scale})`;
+            }
+        }
+    });
+    
+    // 键盘快捷键
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case 'z':
+                    e.preventDefault();
+                    console.log('撤销操作');
+                    break;
+                case 'c':
+                    if (document.querySelector('.layer-row.selected')) {
+                        e.preventDefault();
+                        console.log('复制选中元素');
+                    }
+                    break;
+                case 'v':
+                    e.preventDefault();
+                    console.log('粘贴元素');
+                    break;
+            }
+        }
+    });
+    
+    // 设备切换功能
+    const deviceSelector = document.getElementById('device-selector');
+    const rotateButton = document.getElementById('rotate-screen');
+    const artboard = document.querySelector('.artboard');
+    const artboardLabel = document.querySelector('.artboard-label');
+    
+    const devicePresets = {
+        'iphone-14-pro': { width: 375, height: 812, label: 'iPhone 14 Pro - Home' },
+        'iphone-14': { width: 390, height: 844, label: 'iPhone 14 - Home' },
+        'android': { width: 384, height: 854, label: 'Android - Home' },
+        'ipad': { width: 1024, height: 1366, label: 'iPad Pro - Home' },
+        'desktop': { width: 1440, height: 900, label: 'Desktop - Home' },
+        'tablet': { width: 768, height: 1024, label: 'Tablet - Home' }
+    };
+    
+    let isLandscape = false;
+    
+    deviceSelector.addEventListener('change', function() {
+        const selectedDevice = this.value;
+        const preset = devicePresets[selectedDevice];
+        
+        // 移除所有设备类
+        Object.keys(devicePresets).forEach(device => {
+            artboard.classList.remove(device);
+        });
+        
+        // 添加新设备类
+        artboard.classList.add(selectedDevice);
+        
+        // 如果是横屏模式，添加landscape类
+        if (isLandscape) {
+            artboard.classList.add('landscape');
+        }
+        
+        // 更新标签
+        const orientation = isLandscape ? ' (Landscape)' : '';
+        artboardLabel.textContent = preset.label + orientation;
+        
+        // 更新标尺
+        const currentWidth = isLandscape ? preset.height : preset.width;
+        updateRulers(currentWidth);
+        
+        // 添加切换动画
+        artboard.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            artboard.style.transform = 'scale(1)';
+        }, 200);
+    });
+    
+    // 屏幕旋转功能
+    rotateButton.addEventListener('click', function() {
+        const currentDevice = deviceSelector.value;
+        const preset = devicePresets[currentDevice];
+        
+        // 添加旋转动画
+        artboard.classList.add('rotating');
+        
+        setTimeout(() => {
+            // 切换横屏/竖屏
+            isLandscape = !isLandscape;
+            
+            if (isLandscape) {
+                artboard.classList.add('landscape');
+            } else {
+                artboard.classList.remove('landscape');
+            }
+            
+            // 更新标签
+            const orientation = isLandscape ? ' (Landscape)' : '';
+            artboardLabel.textContent = preset.label + orientation;
+            
+            // 更新标尺
+            const currentWidth = isLandscape ? preset.height : preset.width;
+            updateRulers(currentWidth);
+            
+            // 移除动画类
+            artboard.classList.remove('rotating');
+        }, 300);
+        
+        // 按钮动画反馈
+        this.style.transform = 'rotate(180deg)';
+        setTimeout(() => {
+            this.style.transform = 'rotate(0deg)';
+        }, 600);
+    });
+    
+    // 更新标尺
+    function updateRulers(width) {
+        const rulerHorz = document.querySelector('.ruler-horz');
+        rulerHorz.innerHTML = `
+            <span style="margin-right: 50px;">0</span>
+            <span style="margin-right: 50px;">100</span>
+            <span style="margin-right: 50px;">200</span>
+            <span style="margin-right: 50px; color: var(--accent);">${Math.round(width/2)}</span>
+            <span style="margin-right: 50px;">${width}</span>
+        `;
+    }
+    
+    // 画板拖拽功能
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+    
+    artboard.addEventListener('mousedown', function(e) {
+        // 只有点击画板背景或非交互元素时才触发拖拽
+        if (e.target === artboard || e.target.closest('.app-status-bar, .app-nav, .app-h1')) {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            const rect = artboard.getBoundingClientRect();
+            const parentRect = artboard.parentElement.getBoundingClientRect();
+            initialX = rect.left - parentRect.left;
+            initialY = rect.top - parentRect.top;
+            
+            artboard.classList.add('dragging');
+            artboard.style.position = 'absolute';
+            artboard.style.left = initialX + 'px';
+            artboard.style.top = initialY + 'px';
+            e.preventDefault();
+        }
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        if (isDragging) {
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            artboard.style.left = (initialX + dx) + 'px';
+            artboard.style.top = (initialY + dy) + 'px';
+        }
+    });
+    
+    document.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            artboard.classList.remove('dragging');
+        }
+    });
+    
+    // 双击重置位置
+    artboard.addEventListener('dblclick', function() {
+        artboard.style.position = 'relative';
+        artboard.style.left = 'auto';
+        artboard.style.top = 'auto';
+        artboard.style.transform = 'scale(1.05)';
+        setTimeout(() => {
+            artboard.style.transform = 'scale(1)';
+        }, 200);
+    });
+    
+    // 模拟实时协作光标
+    function createCollaborativeCursor() {
+        const cursor = document.createElement('div');
+        cursor.style.cssText = `
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #f56565;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            transition: all 0.1s ease;
+            opacity: 0.8;
+        `;
+        return cursor;
+    }
+    
+    // 画板内部元素交互
+    document.addEventListener('DOMContentLoaded', function() {
+        // 银行卡轮播功能
+        const cards = document.querySelectorAll('.app-card');
+        const dots = document.querySelectorAll('.card-dot');
+        let currentCard = 0;
+        
+        function showCard(index) {
+            cards.forEach((card, i) => {
+                card.style.transform = `translateX(${(i - index) * -15}px)`;
+                card.style.zIndex = cards.length - Math.abs(i - index);
+                card.style.opacity = Math.abs(i - index) > 1 ? '0.5' : '1';
+            });
+            
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+        }
+        
+        // 点击指示器切换卡片
+        dots.forEach((dot, index) => {
+            dot.addEventListener('click', () => {
+                currentCard = index;
+                showCard(currentCard);
+            });
+        });
+        
+        // 点击卡片切换
+        cards.forEach((card, index) => {
+            card.addEventListener('click', () => {
+                currentCard = index;
+                showCard(currentCard);
+            });
+        });
+        
+        // 初始化显示第一张卡片
+        showCard(0);
+        
+        // Tab bar交互
+        const tabbarIcons = document.querySelectorAll('.app-tabbar i');
+        tabbarIcons.forEach(icon => {
+            icon.addEventListener('click', function() {
+                tabbarIcons.forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+        
+        // 设置默认active状态
+        document.querySelector('.app-tabbar i.fa-home').classList.add('active');
+        
+        // Card点击效果
+        cards.forEach(card => {
+            card.addEventListener('click', function() {
+                this.style.transform = 'scale(0.98)';
+                setTimeout(() => {
+                    showCard(currentCard);
+                }, 100);
+            });
+        });
+        
+        // Grid items点击效果
+        const appItems = document.querySelectorAll('.app-item');
+        appItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // 创建点击反馈
+                const originalBg = this.querySelector('.app-item-icon').style.background;
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 150);
+                
+                // 显示功能提示
+                const title = this.querySelector('.app-item-title').textContent;
+                showNotification(`${title} feature clicked!`);
+            });
+        });
+        
+        // 交易记录点击效果
+        const transactionItems = document.querySelectorAll('.transaction-item');
+        transactionItems.forEach(item => {
+            item.addEventListener('click', function() {
+                this.style.background = '#f8f9fa';
+                setTimeout(() => {
+                    this.style.background = '';
+                }, 200);
+            });
+        });
+        
+        // 通知横幅关闭
+        const closeBanner = document.querySelector('.fa-times');
+        if (closeBanner) {
+            closeBanner.addEventListener('click', function() {
+                const banner = this.closest('[style*="background: linear-gradient"]');
+                banner.style.transition = 'all 0.3s ease';
+                banner.style.opacity = '0';
+                banner.style.transform = 'translateY(-10px)';
+                setTimeout(() => banner.remove(), 300);
+            });
+        }
+        
+        // Nav icons点击效果
+        const navIcons = document.querySelectorAll('.app-nav i');
+        navIcons.forEach(icon => {
+            icon.addEventListener('click', function() {
+                this.style.transform = 'scale(1.2)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 200);
+            });
+        });
+        
+        // 通知功能
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 60px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--accent);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 12px;
+                z-index: 10001;
+                animation: slideDown 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideUp 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+        
+        // 添加动画样式
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideDown {
+                from { opacity: 0; transform: translate(-50%, -10px); }
+                to { opacity: 1; transform: translate(-50%, 0); }
+            }
+            @keyframes slideUp {
+                from { opacity: 1; transform: translate(-50%, 0); }
+                to { opacity: 0; transform: translate(-50%, -10px); }
+            }
+        `;
+        document.head.appendChild(style);
+    });
+    
+    // 添加模拟的协作光标
+    setTimeout(() => {
+        const viewport = document.querySelector('#viewport');
+        if (viewport) {
+            const cursor = createCollaborativeCursor();
+            viewport.appendChild(cursor);
+            
+            // 模拟协作光标移动
+            let x = 100, y = 100;
+            setInterval(() => {
+                x += (Math.random() - 0.5) * 20;
+                y += (Math.random() - 0.5) * 20;
+                x = Math.max(0, Math.min(viewport.offsetWidth - 20, x));
+                y = Math.max(0, Math.min(viewport.offsetHeight - 20, y));
+                cursor.style.left = x + 'px';
+                cursor.style.top = y + 'px';
+            }, 2000);
+        }
+    }, 3000);
+</script>
+</body>
+</html>

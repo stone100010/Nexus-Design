@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Design | The Unified Design Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-dark: #050507;
+            --bg-card: #131316;
+            --primary: #6366f1; /* Indigo */
+            --accent: #ec4899; /* Pink */
+            --text-main: #ffffff;
+            --text-muted: #9ca3af;
+            --border: rgba(255,255,255,0.08);
+            --gradient-glow: conic-gradient(from 180deg at 50% 50%, #6366f1 0deg, #ec4899 180deg, #6366f1 360deg);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+        
+        body { background-color: var(--bg-dark); color: var(--text-main); line-height: 1.6; overflow-x: hidden; }
+
+        /* Typography */
+        h1, h2, h3 { letter-spacing: -0.02em; font-weight: 700; }
+        .text-gradient { background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        /* Layout Utilities */
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        .flex { display: flex; align-items: center; }
+        .grid { display: grid; gap: 24px; }
+        .btn { padding: 12px 24px; border-radius: 8px; font-weight: 600; text-decoration: none; transition: all 0.2s; display: inline-block; cursor: pointer; border: none; font-size: 15px; }
+        .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4); }
+        .btn-primary:hover { background: #4f46e5; transform: translateY(-1px); }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+        /* Navbar */
+        nav { position: fixed; top: 0; width: 100%; z-index: 1000; background: rgba(5,5,7,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        .nav-inner { height: 70px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 20px; font-weight: 800; color: white; display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 24px; height: 24px; background: linear-gradient(135deg, var(--primary), var(--accent)); border-radius: 6px; }
+        .nav-links { display: flex; gap: 32px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 14px; transition: 0.2s; }
+        .nav-links a:hover { color: white; }
+
+        /* Hero Section */
+        .hero { padding: 160px 0 100px; text-align: center; position: relative; overflow: hidden; }
+        .hero-bg { position: absolute; top: -20%; left: 50%; transform: translateX(-50%); width: 80%; height: 600px; background: var(--primary); filter: blur(180px); opacity: 0.15; z-index: -1; pointer-events: none; }
+        
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 100px; color: #a5b4fc; font-size: 13px; margin-bottom: 24px; }
+        
+        .hero h1 { font-size: 64px; line-height: 1.1; margin-bottom: 24px; }
+        .hero p { font-size: 20px; color: var(--text-muted); max-width: 600px; margin: 0 auto 40px; }
+        
+        /* Hero UI Interface Preview */
+        .ui-preview { 
+            margin-top: 60px; 
+            border: 1px solid var(--border); 
+            border-radius: 12px 12px 0 0; 
+            background: #131316; 
+            box-shadow: 0 -20px 80px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+            height: 600px;
+        }
+        .ui-header { height: 40px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 8px; background: #1a1a1e; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #333; }
+        
+        /* Interactive overlay in hero */
+        .hero-cursor {
+            position: absolute; top: 40%; left: 60%;
+            background: var(--accent); color: white; padding: 4px 8px; border-radius: 4px 4px 4px 0; font-size: 12px; font-weight: 600;
+            pointer-events: none; animation: floatCursor 4s infinite ease-in-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        .hero-cursor::before { content:''; position: absolute; top: 0; left: -6px; width: 0; height: 0; border-style: solid; border-width: 0 6px 8px 0; border-color: transparent var(--accent) transparent transparent; }
+
+        @keyframes floatCursor { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-20px, -15px); } }
+
+        /* Clients Strip */
+        .clients { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 30px 0; text-align: center; }
+        .client-logos { display: flex; justify-content: center; gap: 60px; opacity: 0.4; filter: grayscale(1); flex-wrap: wrap;}
+        .client-logos i { font-size: 24px; }
+
+        /* Features Grid (Bento Box Style) */
+        .features { padding: 100px 0; }
+        .section-header { text-align: center; margin-bottom: 60px; }
+        .section-header h2 { font-size: 36px; margin-bottom: 16px; }
+        
+        .bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 300px); gap: 24px; }
+        .bento-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; position: relative; overflow: hidden; transition: 0.3s; display: flex; flex-direction: column; }
+        .bento-card:hover { border-color: rgba(255,255,255,0.2); transform: translateY(-4px); }
+        .bento-card.wide { grid-column: span 2; }
+        .bento-card.tall { grid-row: span 2; }
+        
+        .bento-icon { width: 48px; height: 48px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 20px; margin-bottom: 20px; }
+        .bento-title { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+        .bento-desc { color: var(--text-muted); font-size: 14px; line-height: 1.6; z-index: 2; }
+        
+        /* Visual elements inside cards */
+        .code-block { margin-top: auto; background: #000; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; color: #a5b4fc; border: 1px solid #333; opacity: 0.8; }
+        .mini-app-mock { position: absolute; bottom: -20px; right: -20px; width: 200px; height: 150px; background: #222; border-radius: 12px; border: 4px solid #333; }
+
+        /* CTA Section */
+        .cta-section { padding: 100px 0; text-align: center; background: radial-gradient(circle at center, rgba(99,102,241,0.15) 0%, transparent 70%); }
+        
+        /* 动画效果 */
+        .fade-in { opacity: 0; transform: translateY(30px); transition: all 0.8s ease; }
+        .fade-in.visible { opacity: 1; transform: translateY(0); }
+        
+        .hover-lift { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .hover-lift:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3); }
+        
+        .gradient-text { background: linear-gradient(135deg, #6366f1, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: gradientShift 3s ease infinite; }
+        
+        @keyframes gradientShift {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(30deg); }
+        }
+        
+        .pricing-card { transition: all 0.3s ease; }
+        .pricing-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+        
+        .testimonial-card { transition: all 0.3s ease; }
+        .testimonial-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2); }
+        
+        .component-item { transition: all 0.2s ease; }
+        .component-item:hover { background: rgba(99, 102, 241, 0.1); border-color: var(--accent); transform: scale(1.05); }
+        
+        /* 滚动条样式 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+        
+        /* 响应式布局 */
+        @media (max-width: 768px) {
+            .container { padding: 0 16px; }
+            
+            nav { padding: 0 16px; }
+            .nav-links { display: none; }
+            .logo { font-size: 18px; }
+            
+            .hero { padding: 120px 0 80px; }
+            .hero h1 { font-size: 40px; }
+            .hero p { font-size: 18px; }
+            
+            .ui-preview { height: 400px; margin-top: 40px; }
+            
+            .bento-grid { grid-template-columns: 1fr; gap: 16px; }
+            .bento-card.wide, .bento-card.tall { grid-column: span 1; grid-row: span 1; }
+            
+            .client-logos { gap: 30px; font-size: 14px; }
+            
+            .pricing { padding: 60px 0; }
+            .pricing .container > div:last-child { grid-template-columns: 1fr; gap: 20px; }
+            
+            .testimonials { padding: 60px 0; }
+            .testimonials .container > div:last-child { grid-template-columns: 1fr; gap: 20px; }
+            
+            .ai-demo { padding: 60px 0; }
+            .ai-demo .container > div > div { flex-direction: column; gap: 20px; }
+            
+            .final-cta { padding: 60px 0; }
+            .final-cta h2 { font-size: 32px; }
+            .final-cta .container > div:last-child { flex-direction: column; gap: 12px; }
+        }
+        
+        @media (max-width: 480px) {
+            .hero h1 { font-size: 32px; }
+            .hero p { font-size: 16px; }
+            
+            .btn { padding: 10px 20px; font-size: 14px; }
+            
+            .section-header h2 { font-size: 28px; }
+            
+            .final-cta h2 { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="container nav-inner">
+            <div class="logo">
+                <div class="logo-icon"></div> Nexus Design
+            </div>
+            <div class="nav-links">
+                <a href="#">Product</a>
+                <a href="#">Features</a>
+                <a href="#">Enterprise</a>
+                <a href="#">Pricing</a>
+            </div>
+            <div class="flex" style="gap:16px;">
+                <a href="auth.html" style="color:white; text-decoration:none; font-size:14px; font-weight:500;">Log in</a>
+                <a href="auth.html" class="btn btn-primary">Sign Up Free</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-bg"></div>
+        <div class="container">
+            <div class="badge"><i class="fas fa-sparkles"></i> New: Nexus AI 2.0 is now live</div>
+            <h1 class="text-gradient">Design once.<br>Deploy everywhere.</h1>
+            <p>The only UI design tool that speaks the language of production. Native support for React, Vue, iOS, Android, and Responsive Web.</p>
+            <div class="flex" style="justify-content: center; gap: 16px;">
+                <a href="auth.html" class="btn btn-primary">Start Designing for Free</a>
+                <button class="btn btn-secondary"><i class="fas fa-play"></i> Watch Demo</button>
+            </div>
+
+            <div class="ui-preview">
+                <div class="ui-header">
+                    <div class="dot" style="background:#ff5f57"></div>
+                    <div class="dot" style="background:#febc2e"></div>
+                    <div class="dot" style="background:#28c840"></div>
+                </div>
+                <div class="hero-cursor">Sarah is editing...</div>
+                <div style="display:flex; height: 100%;">
+                    <div style="width: 200px; border-right: 1px solid var(--border); padding: 20px;">
+                        <div style="height: 10px; width: 60%; background: #333; margin-bottom: 20px; border-radius: 4px;"></div>
+                        <div style="height: 8px; width: 100%; background: #222; margin-bottom: 10px; border-radius: 4px;"></div>
+                        <div style="height: 8px; width: 80%; background: #222; margin-bottom: 10px; border-radius: 4px;"></div>
+                    </div>
+                    <div style="flex:1; background: #0a0a0a; display:flex; align-items:center; justify-content:center;">
+                        <div style="width: 300px; height: 500px; background: #1a1a1a; border-radius: 20px; border: 2px solid #333; position:relative; overflow:hidden;">
+                            <div style="height: 150px; background: linear-gradient(to bottom right, #6366f1, #ec4899);"></div>
+                            <div style="padding: 20px;">
+                                <div style="width: 60px; height: 60px; background: #333; border-radius: 50%; border: 4px solid #1a1a1a; margin-top: -50px;"></div>
+                                <div style="height: 10px; width: 100px; background: #444; margin-top: 15px; border-radius: 4px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="width: 240px; border-left: 1px solid var(--border); padding: 20px;">
+                        <div style="height: 10px; width: 40%; background: var(--primary); margin-bottom: 20px; border-radius: 4px;"></div>
+                        <div style="padding: 10px; background: #1a1a1a; border-radius: 6px; font-family: monospace; font-size: 10px; color: #888;">
+                            export const Card = () => {<br>
+                                return &lt;View&gt;...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="clients">
+        <div class="container">
+            <p style="margin-bottom: 20px; color: #555; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Trusted by design teams at</p>
+            <div class="client-logos">
+                <span style="display:flex; align-items:center; gap:8px;"><i class="fab fa-google"></i> Google</span>
+                <span style="display:flex; align-items:center; gap:8px;"><i class="fab fa-microsoft"></i> Microsoft</span>
+                <span style="display:flex; align-items:center; gap:8px;"><i class="fab fa-airbnb"></i> Airbnb</span>
+                <span style="display:flex; align-items:center; gap:8px;"><i class="fab fa-spotify"></i> Spotify</span>
+            </div>
+        </div>
+    </div>
+
+    <section class="features container">
+        <div class="section-header">
+            <h2 class="text-gradient">More than just pixels.</h2>
+            <p>The only platform that bridges the gap between creativity and compile-ready code.</p>
+        </div>
+
+        <div class="bento-grid">
+            <div class="bento-card wide">
+                <div class="bento-icon"><i class="fas fa-magic"></i></div>
+                <h3 class="bento-title">Text-to-UI Generation</h3>
+                <p class="bento-desc">Describe your interface in natural language. Nexus AI builds editable, layered vector designs with auto-layout applied instantly. Stop starting from a blank canvas.</p>
+            </div>
+
+            <div class="bento-card tall" style="background: linear-gradient(to bottom, #131316, #1c1c24);">
+                <div class="bento-icon"><i class="fas fa-code"></i></div>
+                <h3 class="bento-title">Production Ready Code</h3>
+                <p class="bento-desc">We don't just give you CSS. We generate React components, Vue templates, and native mobile code for production deployment.</p>
+                <div class="code-block">
+&lt;div className="container"&gt;
+  &lt;h1&gt;Hello Nexus&lt;/h1&gt;
+  &lt;button onClick={submit}&gt;
+    Start
+  &lt;/button&gt;
+&lt;/div&gt;
+                </div>
+            </div>
+
+            <div class="bento-card">
+                <div class="bento-icon"><i class="fas fa-mobile-alt"></i></div>
+                <h3 class="bento-title">Mobile First</h3>
+                <p class="bento-desc">Design for iOS, Android, and responsive web with accurate previews and device-specific optimizations.</p>
+            </div>
+
+            <div class="bento-card wide">
+                <div class="bento-icon"><i class="fas fa-users"></i></div>
+                <h3 class="bento-title">Real-time Collaboration</h3>
+                <p class="bento-desc">Work together in real-time with live cursors, comments, and branch-based version control designed for enterprise scale.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container">
+            <h2 style="font-size: 48px; margin-bottom: 24px;">Ready to build the future?</h2>
+            <p style="color: var(--text-muted); margin-bottom: 32px;">Join 50,000+ designers and developers using Nexus today.</p>
+            <a href="auth.html" class="btn btn-primary" style="padding: 16px 32px; font-size: 18px; text-decoration: none;">Get Started for Free</a>
+        </div>
+    </section>
+
+    <!-- AI Demo Section -->
+    <section class="ai-demo" style="padding: 100px 0; background: linear-gradient(to bottom, var(--bg-dark), #0a0a0f);">
+        <div class="container">
+            <div class="section-header">
+                <div class="badge" style="margin: 0 auto 24px;"><i class="fas fa-brain"></i> AI-Powered Design</div>
+                <h2 class="text-gradient" style="font-size: 48px;">From text to interface in seconds</h2>
+                <p style="color: var(--text-muted); font-size: 18px; max-width: 700px; margin: 0 auto;">Describe your idea, and AI generates professional designs. Support iterative optimization to perfectly match your brand style.</p>
+            </div>
+            
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; margin-top: 60px;">
+                <div style="display: flex; gap: 40px; align-items: stretch;">
+                    <!-- Input Area -->
+                    <div style="flex: 1;">
+                        <h3 style="margin-bottom: 20px; color: white;">AI Design Input</h3>
+                        <div style="background: #0a0a0a; border: 1px solid #333; border-radius: 8px; padding: 20px;">
+                            <div style="color: var(--text-muted); margin-bottom: 10px; font-size: 12px;">Describe your design requirements:</div>
+                            <div style="color: #a5b4fc; line-height: 1.6;">
+                                "Create a modern e-commerce product card with product image, title, price and buy button. Use gradient background, rounded corners, and hover effects."
+                            </div>
+                            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                <button class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
+                                    <i class="fas fa-magic"></i> Generate Design
+                                </button>
+                                <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">
+                                    Optimize
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px;">
+                            <div style="color: var(--text-muted); margin-bottom: 10px; font-size: 12px;">AI Generation Options:</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Modern Style</span>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Responsive</span>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Component-based</span>
+                                <span style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Animations</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Output Preview -->
+                    <div style="flex: 1;">
+                        <h3 style="margin-bottom: 20px; color: white;">AI Generated Result</h3>
+                        <div style="background: white; border-radius: 12px; padding: 20px; height: 300px; position: relative;">
+                            <div style="width: 100%; height: 120px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; margin-bottom: 15px;"></div>
+                            <div style="height: 20px; width: 80%; background: #333; border-radius: 4px; margin-bottom: 10px;"></div>
+                            <div style="height: 16px; width: 60%; background: #666; border-radius: 4px; margin-bottom: 15px;"></div>
+                            <button style="background: #6366f1; color: white; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600;">Buy Now</button>
+                            
+                            <div style="position: absolute; top: 10px; right: 10px; background: rgba(99, 102, 241, 0.9); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px;">
+                                <i class="fas fa-sparkles"></i> AI Generated
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px; background: #0a0a0a; border: 1px solid #333; border-radius: 8px; padding: 15px;">
+                            <div style="color: var(--text-muted); margin-bottom: 10px; font-size: 12px;">Generated Code:</div>
+                            <div style="font-family: monospace; font-size: 10px; color: #a5b4fc; line-height: 1.4;">
+                                &lt;div class="product-card"&gt;<br>
+                                &nbsp;&nbsp;&lt;div class="product-image"&gt;&lt;/div&gt;<br>
+                                &nbsp;&nbsp;&lt;h3&gt;Product Name&lt;/h3&gt;<br>
+                                &nbsp;&nbsp;&lt;p class="price"&gt;$299&lt;/p&gt;<br>
+                                &nbsp;&nbsp;&lt;button class="buy-btn"&gt;Buy&lt;/button&gt;<br>
+                                &lt;/div&gt;
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing" style="padding: 100px 0;">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="text-gradient" style="font-size: 48px;">Choose your perfect plan</h2>
+                <p style="color: var(--text-muted); font-size: 18px;">From individual creators to enterprise teams, we have the perfect solution for everyone</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 60px;">
+                <!-- Free Plan -->
+                <div class="pricing-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; position: relative;">
+                    <h3 style="font-size: 24px; margin-bottom: 10px;">Free</h3>
+                    <div style="color: var(--text-muted); margin-bottom: 30px;">Perfect for learning and personal projects</div>
+                    <div style="font-size: 48px; font-weight: 700; margin-bottom: 30px;">
+                        $0<span style="font-size: 16px; color: var(--text-muted);">/month</span>
+                    </div>
+                    <ul style="list-style: none; margin-bottom: 40px;">
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Basic design tools</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>3 projects</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Basic component library</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-times" style="color: #ef4444; margin-right: 10px;"></i>AI features</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-times" style="color: #ef4444; margin-right: 10px;"></i>Team collaboration</li>
+                    </ul>
+                    <button class="btn btn-secondary" style="width: 100%;">Get Started</button>
+                </div>
+                
+                <!-- Pro Plan -->
+                <div class="pricing-card" style="background: var(--bg-card); border: 2px solid var(--primary); border-radius: 16px; padding: 40px; position: relative; transform: scale(1.05);">
+                    <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 16px; border-radius: 12px; font-size: 12px; font-weight: 600;">Most Popular</div>
+                    <h3 style="font-size: 24px; margin-bottom: 10px;">Professional</h3>
+                    <div style="color: var(--text-muted); margin-bottom: 30px;">For professional designers and small teams</div>
+                    <div style="font-size: 48px; font-weight: 700; margin-bottom: 30px;">
+                        $29<span style="font-size: 16px; color: var(--text-muted);">/month</span>
+                    </div>
+                    <ul style="list-style: none; margin-bottom: 40px;">
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Complete design tools</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Unlimited projects</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Advanced component library</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>AI design assistant</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>5 team members</li>
+                    </ul>
+                    <button class="btn btn-primary" style="width: 100%;">Upgrade Now</button>
+                </div>
+                
+                <!-- Enterprise Plan -->
+                <div class="pricing-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; position: relative;">
+                    <h3 style="font-size: 24px; margin-bottom: 10px;">Enterprise</h3>
+                    <div style="color: var(--text-muted); margin-bottom: 30px;">For large teams and organizations</div>
+                    <div style="font-size: 48px; font-weight: 700; margin-bottom: 30px;">
+                        $99<span style="font-size: 16px; color: var(--text-muted);">/month</span>
+                    </div>
+                    <ul style="list-style: none; margin-bottom: 40px;">
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>All Professional features</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Unlimited collaboration</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Enterprise security</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Private deployment</li>
+                        <li style="padding: 8px 0; color: var(--text-muted);"><i class="fas fa-check" style="color: #10b981; margin-right: 10px;"></i>Dedicated support</li>
+                    </ul>
+                    <button class="btn btn-secondary" style="width: 100%;">Contact Sales</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials" style="padding: 100px 0; background: linear-gradient(to bottom, #0a0a0f, var(--bg-dark));">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="text-gradient" style="font-size: 48px;">What our users say</h2>
+                <p style="color: var(--text-muted); font-size: 18px;">See how other teams are using Nexus to boost their productivity</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 60px;">
+                <div class="testimonial-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px;">
+                    <div style="display: flex; margin-bottom: 20px;">
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                    </div>
+                    <p style="color: var(--text-main); line-height: 1.6; margin-bottom: 20px;">"Nexus completely transformed our design process. We reduced design-to-code time by 80% and significantly improved team collaboration efficiency."</p>
+                    <div style="display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; background: #6366f1; border-radius: 50%; margin-right: 15px;"></div>
+                        <div>
+                            <div style="font-weight: 600;">Alex Chen</div>
+                            <div style="color: var(--text-muted); font-size: 12px;">Product Manager · Tech Innovations</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px;">
+                    <div style="display: flex; margin-bottom: 20px;">
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                    </div>
+                    <p style="color: var(--text-main); line-height: 1.6; margin-bottom: 20px;">"The AI features are incredible! Just describe your idea and get professional designs instantly. The code generation saves us countless development hours."</p>
+                    <div style="display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; background: #ec4899; border-radius: 50%; margin-right: 15px;"></div>
+                        <div>
+                            <div style="font-weight: 600;">Sarah Miller</div>
+                            <div style="color: var(--text-muted); font-size: 12px;">UI Designer · E-commerce Platform</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px;">
+                    <div style="display: flex; margin-bottom: 20px;">
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                        <i class="fas fa-star" style="color: #fbbf24;"></i>
+                    </div>
+                    <p style="color: var(--text-main); line-height: 1.6; margin-bottom: 20px;">"Real-time collaboration makes our remote team feel like we're in the same room. The version control and design system management features are exceptional."</p>
+                    <div style="display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; background: #10b981; border-radius: 50%; margin-right: 15px;"></div>
+                        <div>
+                            <div style="font-weight: 600;">David Johnson</div>
+                            <div style="color: var(--text-muted); font-size: 12px;">Tech Lead · FinTech Company</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-cta" style="padding: 100px 0; text-align: center; background: radial-gradient(circle at center, rgba(99,102,241,0.15) 0%, transparent 70%);">
+        <div class="container">
+            <h2 style="font-size: 56px; margin-bottom: 24px;">Ready to revolutionize your design workflow?</h2>
+            <p style="color: var(--text-muted); font-size: 20px; margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto;">Join 50,000+ designers and developers experiencing the power of next-generation design tools</p>
+            <div style="display: flex; justify-content: center; gap: 20px;">
+                <button class="btn btn-primary" style="padding: 16px 32px; font-size: 18px;">
+                    <i class="fas fa-rocket"></i> Start Free Today
+                </button>
+                <button class="btn btn-secondary" style="padding: 16px 32px; font-size: 18px;">
+                    <i class="fas fa-calendar"></i> Book a Demo
+                </button>
+            </div>
+        </div>
+    </section>
+
+<script>
+    // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+        
+        // 为需要动画的元素添加观察
+        document.addEventListener('DOMContentLoaded', function() {
+            const animateElements = document.querySelectorAll('.features, .ai-demo, .pricing, .testimonials, .final-cta');
+            animateElements.forEach(el => {
+                el.classList.add('fade-in');
+                observer.observe(el);
+            });
+            
+            // 为卡片添加悬停效果
+            document.querySelectorAll('.bento-card, .pricing-card, .testimonial-card').forEach(card => {
+                card.classList.add('hover-lift');
+            });
+        });
+        
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+        
+        // 鼠标跟随效果
+        document.addEventListener('mousemove', (e) => {
+            const heroBg = document.querySelector('.hero-bg');
+            if (heroBg) {
+                const x = e.clientX / window.innerWidth;
+                const y = e.clientY / window.innerHeight;
+                heroBg.style.transform = `translateX(-50%) translateY(${y * 20}px)`;
+            }
+        });
+    </script>
+</body>
+</html>
