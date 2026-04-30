@@ -394,7 +394,7 @@ export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({ className })
           <div className="flex justify-between items-center text-sm mt-1">
             <span className="text-gray-300">元素</span>
             <span className="font-mono text-gray-200">
-              {useEditorStore.getState().elements.length}
+              {useEditorStore.getState().getActivePage()?.elements.length ?? 0}
             </span>
           </div>
         </div>

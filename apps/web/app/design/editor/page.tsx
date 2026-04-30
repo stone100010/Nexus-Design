@@ -33,7 +33,6 @@ function DesignEditorContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const {
-    elements,
     saveProject,
     loadProject,
     clearCanvas,
@@ -42,6 +41,7 @@ function DesignEditorContent() {
     canUndo,
     canRedo,
     isSaving,
+    getActivePage,
     history,
     selectedElementIds,
     alignElements,
@@ -51,6 +51,9 @@ function DesignEditorContent() {
   } = useEditorStore()
 
   const { showToast } = useUIStore()
+  const activePage = getActivePage()
+  const elements = activePage?.elements ?? []
+  const pages = useEditorStore((s) => s.pages)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCodePreview, setShowCodePreview] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
@@ -219,81 +222,96 @@ function DesignEditorContent() {
   }
 
   const generateReactCode = () => {
-    const elementCode = elements.map(el => {
-      const posStyle = `left: ${el.x}px, top: ${el.y}px, width: ${el.width}px, height: ${el.height}px`
-      const styleProps = Object.entries(el.styles || {})
-        .map(([k, v]) => `${k}: '${v}'`)
-        .join(', ')
+    const allPages = useEditorStore.getState().pages
 
-      if (el.type === 'button') {
-        return `      <button
+    const pageComponents = allPages.map((page) => {
+      const elementCode = page.elements.map(el => {
+        const posStyle = `left: ${el.x}px, top: ${el.y}px, width: ${el.width}px, height: ${el.height}px`
+        const styleProps = Object.entries(el.styles || {})
+          .map(([k, v]) => `${k}: '${v}'`)
+          .join(', ')
+
+        if (el.type === 'button') {
+          return `      <button
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
         className="rounded-md font-medium transition-colors hover:opacity-90"
       >
         ${el.props?.text || '按钮'}
       </button>`
-      } else if (el.type === 'text') {
-        return `      <div
+        } else if (el.type === 'text') {
+          return `      <div
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
       >
         ${el.props?.text || '文本'}
       </div>`
-      } else if (el.type === 'input') {
-        return `      <input
+        } else if (el.type === 'input') {
+          return `      <input
         placeholder="${el.props?.placeholder || '请输入...'}"
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
         className="rounded-md border px-3 py-2"
       />`
-      } else if (el.type === 'image') {
-        return `      <img
+        } else if (el.type === 'image') {
+          return `      <img
         src="${el.props?.src || ''}"
         alt="${el.props?.alt || ''}"
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
       />`
-      } else {
-        return `      <div
+        } else {
+          return `      <div
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
         className="rounded-md"
       >
         ${el.props?.text || el.props?.children || ''}
       </div>`
-      }
-    }).join('\n\n')
+        }
+      }).join('\n\n')
 
-    return `import React from 'react'
+      const componentName = page.name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '')
 
-export default function GeneratedComponent() {
+      return `export function ${componentName}() {
   return (
     <div className="relative w-full min-h-screen bg-gray-900">
 ${elementCode}
     </div>
   )
-}
+}`
+    }).join('\n\n')
+
+    return `import React from 'react'
+
+${pageComponents}
 `
   }
 
   const generateVueCode = () => {
-    const elementCode = elements.map(el => {
-      const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
+    const allPages = useEditorStore.getState().pages
 
-      if (el.type === 'button') {
-        return `    <button style="${style}" class="rounded-md font-medium">${el.props?.text || '按钮'}</button>`
-      } else if (el.type === 'text') {
-        return `    <div style="${style}">${el.props?.text || '文本'}</div>`
-      } else if (el.type === 'input') {
-        return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" class="rounded-md border px-3 py-2" />`
-      } else if (el.type === 'image') {
-        return `    <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
-      } else {
-        return `    <div style="${style}" class="rounded-md">${el.props?.text || el.props?.children || ''}</div>`
-      }
-    }).join('\n')
+    const pageComponents = allPages.map((page) => {
+      const elementCode = page.elements.map(el => {
+        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
 
-    return `<template>
+        if (el.type === 'button') {
+          return `    <button style="${style}" class="rounded-md font-medium">${el.props?.text || '按钮'}</button>`
+        } else if (el.type === 'text') {
+          return `    <div style="${style}">${el.props?.text || '文本'}</div>`
+        } else if (el.type === 'input') {
+          return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" class="rounded-md border px-3 py-2" />`
+        } else if (el.type === 'image') {
+          return `    <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
+        } else {
+          return `    <div style="${style}" class="rounded-md">${el.props?.text || el.props?.children || ''}</div>`
+        }
+      }).join('\n')
+
+      return `<!-- ${page.name} -->
+<template>
   <div class="design-container">
 ${elementCode}
   </div>
-</template>
+</template>`
+    }).join('\n\n')
+
+    return `${pageComponents}
 
 <script setup lang="ts">
 // Generated by Nexus Design
@@ -311,20 +329,31 @@ ${elementCode}
   }
 
   const generateHtmlCode = () => {
-    const elementCode = elements.map(el => {
-      const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
+    const allPages = useEditorStore.getState().pages
 
-      if (el.type === 'button') {
-        return `    <button style="${style}">${el.props?.text || '按钮'}</button>`
-      } else if (el.type === 'text') {
-        return `    <div style="${style}">${el.props?.text || '文本'}</div>`
-      } else if (el.type === 'input') {
-        return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" />`
-      } else if (el.type === 'image') {
-        return `    <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
-      } else {
-        return `    <div style="${style}">${el.props?.text || el.props?.children || ''}</div>`
-      }
+    const pageHtml = allPages.map((page) => {
+      const elementCode = page.elements.map(el => {
+        const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
+
+        if (el.type === 'button') {
+          return `        <button style="${style}">${el.props?.text || '按钮'}</button>`
+        } else if (el.type === 'text') {
+          return `        <div style="${style}">${el.props?.text || '文本'}</div>`
+        } else if (el.type === 'input') {
+          return `        <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" />`
+        } else if (el.type === 'image') {
+          return `        <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
+        } else {
+          return `        <div style="${style}">${el.props?.text || el.props?.children || ''}</div>`
+        }
+      }).join('\n')
+
+      return `      <div class="phone-wrapper">
+        <div class="phone-label">${page.name}</div>
+        <div class="phone-frame">
+${elementCode}
+        </div>
+      </div>`
     }).join('\n')
 
     return `<!DOCTYPE html>
@@ -332,18 +361,55 @@ ${elementCode}
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Generated Design</title>
+  <title>多页面设计预览</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    .design-container { position: relative; width: 100%; min-height: 100vh; background: #111827; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 {
+      text-align: center;
+      color: rgba(255,255,255,0.8);
+      font-size: 24px;
+      margin-bottom: 40px;
+    }
+    .pages-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 40px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .phone-wrapper {
+      text-align: center;
+    }
+    .phone-label {
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .phone-frame {
+      position: relative;
+      width: 375px;
+      height: 812px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 40px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      box-shadow: 0 0 60px rgba(102, 126, 234, 0.3);
+    }
     button { cursor: pointer; border: none; }
     input { outline: none; }
   </style>
 </head>
 <body>
-  <div class="design-container">
-${elementCode}
+  <h1>多页面设计预览</h1>
+  <div class="pages-grid">
+${pageHtml}
   </div>
 </body>
 </html>
@@ -377,9 +443,13 @@ ${elementCode}
           
           <div className="w-px h-6 bg-gray-600" />
           
-          <h1 className="text-sm font-semibold text-white">设计编辑器</h1>
-          
+          <h1 className="text-sm font-semibold text-white">
+            {activePage?.name || '设计编辑器'}
+          </h1>
+
           <div className="flex items-center space-x-2 text-xs text-gray-400">
+            <span>页面: {pages.length}</span>
+            <span>·</span>
             <span>元素: {elements.length}</span>
             <span>·</span>
             <span>历史: {history.length}</span>

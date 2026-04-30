@@ -21,20 +21,21 @@ interface PropertiesPanelProps {
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) => {
-  const { 
-    elements, 
-    selectedElementIds, 
-    updateElement, 
+  const {
+    selectedElementIds,
+    updateElement,
     deleteElement,
     duplicateElement,
     bringToFront,
     sendToBack,
-    clearSelection
+    clearSelection,
+    getActivePage
   } = useEditorStore()
-  
+
   const { showToast } = useUIStore()
   const [activeTab, setActiveTab] = useState<'style' | 'props' | 'layout'>('style')
 
+  const elements = getActivePage()?.elements ?? []
   const selectedElement = elements.find(el => selectedElementIds.includes(el.id))
 
   // Form state
