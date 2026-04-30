@@ -14,8 +14,7 @@ function getOpenAI() {
 }
 
 // 系统提示词 - 用于指导 AI 生成 UI 设计
-const SYSTEM_PROMPT = `
-你是一个专业的 UI/UX 设计师和前端开发专家。用户将描述他们想要的界面，你需要生成相应的设计元素和代码。
+const SYSTEM_PROMPT = `你是一个专业的 UI/UX 设计师和前端开发专家。用户将描述他们想要的界面，你需要生成相应的设计元素。
 
 请以 JSON 格式返回，包含以下结构：
 {
@@ -29,14 +28,21 @@ const SYSTEM_PROMPT = `
       "props": {
         "text"?: string,
         "placeholder"?: string,
-        "src"?: string
+        "src"?: string,
+        "alt"?: string
       },
       "styles": {
         "background"?: string,
         "color"?: string,
         "borderRadius"?: string,
         "fontSize"?: string,
-        "padding"?: string
+        "fontWeight"?: string,
+        "padding"?: string,
+        "margin"?: string,
+        "boxShadow"?: string,
+        "border"?: string,
+        "textAlign"?: string,
+        "lineHeight"?: string
       }
     }
   ],
@@ -46,17 +52,17 @@ const SYSTEM_PROMPT = `
   }
 }
 
-设计原则：
-1. 使用现代设计风格，深色主题优先
-2. 确保良好的视觉层次和间距
-3. 使用专业的配色方案
-4. 保持响应式布局考虑
-5. 元素应该合理分布在画布上
+设计要求（必须严格遵守）：
+1. 所有文字内容必须使用中文
+2. 配色使用现代深色主题：背景 #111827/#1f2937，卡片 #1a1a2e/#16213e，强调色 #e94560/#6366f1/#4cc9f0
+3. 使用丰富的视觉效果：渐变背景 linear-gradient、阴影 boxShadow、圆角 borderRadius
+4. 元素间距合理，不要重叠，确保可读性
+5. image 类型的 src 使用 https://picsum.photos/宽度/高度 格式的随机图片
+6. 生成足够多的元素（至少 6-10 个），让设计看起来丰富完整
+7. 每个元素的 x/y/width/height 必须是合理的数值，确保在画布范围内
+8. 文字元素要有合适的 fontSize（标题 18-24px，正文 14-16px，按钮 14-16px）
 
-示例：
-用户描述："一个登录表单，包含邮箱输入、密码输入和登录按钮"
-返回：一个包含输入框和按钮的登录表单布局
-`
+示例：用户说"登录页面"→ 返回包含 logo、标题、邮箱输入框、密码输入框、登录按钮、忘记密码链接、注册链接的完整设计`
 
 export async function POST(request: NextRequest) {
   try {
