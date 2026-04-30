@@ -91,22 +91,40 @@ export async function POST(request: NextRequest) {
     let project
 
     if (id) {
-      // 更新现有项目
-      project = await prisma.project.update({
-        where: { id },
-        data: {
-          name,
-          description,
-          data,
-          settings: settings || { theme: 'dark', devices: ['iphone-14-pro'] },
-          updatedAt: new Date()
-        },
-        include: {
-          owner: {
-            select: { id: true, name: true, email: true }
+      // 更新现有项目（不存在则创建）
+      try {
+        project = await prisma.project.update({
+          where: { id },
+          data: {
+            name,
+            description,
+            data,
+            settings: settings || { theme: 'dark', devices: ['iphone-14-pro'] },
+            updatedAt: new Date()
+          },
+          include: {
+            owner: {
+              select: { id: true, name: true, email: true }
+            }
           }
-        }
-      })
+        })
+      } catch {
+        // 项目已被删除，降级为创建新项目
+        project = await prisma.project.create({
+          data: {
+            name: name || '未命名项目',
+            description: description || '',
+            data: data || {},
+            settings: settings || { theme: 'dark', devices: ['iphone-14-pro'] },
+            ownerId: user.id
+          },
+          include: {
+            owner: {
+              select: { id: true, name: true, email: true }
+            }
+          }
+        })
+      }
     } else {
       // 创建新项目
       project = await prisma.project.create({
