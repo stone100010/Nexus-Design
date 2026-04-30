@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
+import { handleApiError } from '@/lib/api-error'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
 // GET - 获取项目列表
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     
@@ -56,13 +57,7 @@ export async function GET(request: NextRequest) {
       data: projects
     })
   } catch (error) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : '获取项目失败' 
-      },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -136,12 +131,6 @@ export async function POST(request: NextRequest) {
       message: id ? '项目已更新' : '项目已创建'
     })
   } catch (error) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : '保存项目失败' 
-      },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

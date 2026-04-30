@@ -14,7 +14,7 @@ export async function testDatabaseConnection(): Promise<{
     const userCount = await prisma.user.count()
     
     // 尝试获取 PostgreSQL 版本
-    const result = await prisma.$queryRaw`SELECT version()` as any[]
+    const result = await prisma.$queryRaw`SELECT version()` as Record<string, string>[]
     const version = result[0]?.version || 'Unknown'
     
     return {
@@ -72,7 +72,7 @@ export async function checkTablesExist(): Promise<{
       AND table_type = 'BASE TABLE'
     `
     
-    const existingTables = (tables as any[]).map((t: any) => t.table_name)
+    const existingTables = (tables as Record<string, string>[]).map((t) => t.table_name)
     const requiredTables = [
       'users', 'sessions', 'teams', 'team_members', 'projects', 
       'project_members', 'versions', 'components', 'ai_generations',

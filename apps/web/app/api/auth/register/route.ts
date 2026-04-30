@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
+import { handleApiError } from '@/lib/api-error'
 import { prisma } from '@/lib/db'
 
 const registerSchema = z.object({
@@ -50,7 +51,8 @@ export async function POST(request: NextRequest) {
     })
 
     // 返回用户信息（不包含密码）
-    const { password: _, ...userWithoutPassword } = user
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _pw, ...userWithoutPassword } = user
 
     return NextResponse.json(
       { 
@@ -61,10 +63,6 @@ export async function POST(request: NextRequest) {
     )
 
   } catch (error) {
-    console.error('注册错误:', error)
-    return NextResponse.json(
-      { error: '服务器错误，请稍后重试' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
