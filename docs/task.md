@@ -1,398 +1,279 @@
-# Nexus Design - 多页面 AI 设计系统重构任务
+# AI 设计生成 - 代码检查与修复任务
 
 **创建日期**：2026-04-30
-**任务来源**：基于 `docs/MULTI-PAGE-DESIGN-PLAN.md` 多页面架构改造方案
-**总目标**：将单页 AI 设计系统改造为多页面设计系统，支持一次生成完整 APP 的 3-5 个页面方案
+**依据文档**：`docs/AI-GENERATE-PRD.md`
+**总目标**：按照 PRD 页面流转路径，逐页检查样式和代码 bug，构建 检查+修复+测试 完整闭环
 
 ---
 
 ## 任务总览
 
-| 模块 | 任务内容 | 任务数 | 优先级 | 状态 |
-|------|----------|--------|--------|------|
-| M1 | 类型定义与数据结构 | 5 | P0 | ✅ 已完成 |
-| M2 | 后端 AI 接口改造 | 8 | P0 | ✅ 已完成 |
-| M3 | Editor Store 多页改造 | 10 | P0 | ✅ 已完成 |
-| M4 | Canvas 画布页面切换 | 8 | P0 | ✅ 已完成 |
-| M5 | AI 生成页改造 | 7 | P0 | ✅ 已完成 |
-| M6 | 编辑器页面改造 | 8 | P1 | ✅ 已完成 |
-| M7 | 属性面板与组件库适配 | 5 | P1 | ✅ 已完成 |
-| M8 | 导出代码生成改造 | 5 | P1 | ✅ 已完成 |
-| M9 | 工作区项目管理适配 | 4 | P1 | ✅ 已完成 |
-| M10 | HTML 多页预览 | 4 | P2 | ⬜ 待开始 |
-| M11 | 全局测试与回归验证 | 6 | P0 | ✅ 已完成 |
-| **合计** | | **70** | | |
+| 阶段 | 页面/模块 | 任务数 | 优先级 | 状态 |
+|------|-----------|--------|--------|------|
+| T1 | AI 生成页 (`/design/ai`) | 6 | P0 | 待开始 |
+| T2 | 后端 API (`/api/ai/generate`) | 5 | P0 | 待开始 |
+| T3 | 编辑器 Store (`stores/editor.ts`) | 5 | P0 | 待开始 |
+| T4 | 画布组件 (`canvas.tsx`) | 4 | P0 | 待开始 |
+| T5 | 编辑器页面 (`/design/editor`) | 5 | P0 | 待开始 |
+| T6 | 属性面板 (`properties-panel.tsx`) | 3 | P1 | 待开始 |
+| T7 | 组件库 (`component-library.tsx`) | 2 | P1 | 待开始 |
+| T8 | 工作区 (`/workspace`) | 3 | P1 | 待开始 |
+| T9 | 项目 API (`/api/projects`) | 2 | P1 | 待开始 |
+| T10 | 类型定义 (`types/index.ts`) | 2 | P1 | 待开始 |
+| T11 | 全局测试与验证 | 6 | P0 | 待开始 |
+| **合计** | | **43** | | |
 
 ---
 
-## M1：类型定义与数据结构
+## T1：AI 生成页 (`apps/web/app/design/ai/page.tsx`)
 
-**目标**：定义多页面设计的核心类型
-**文件**：`apps/web/app/types/index.ts`
+**目标**：SSE 流式接收、首屏快速跳转、后续页后台加载
 
-### 1.1 新增类型
+### 1.1 代码 Bug
 
-- [x] 新增 `DesignPage` 接口：`{ id, name, description?, canvas, elements[] }`
-- [x] 新增 `MultiPageDesignOutput` 接口：`{ app, style, pages[] }`
-- [x] 修改 `EditorState`：`elements` → `pages` + `activePageId`
-- [x] 修改 `DesignOutput` 类型兼容新旧格式
-- [x] 修改 `AIGeneration.design` 字段类型说明
+- [ ] **[Critical] 增量解析器 0 页问题**：后端 incremental JSON parser 在 buffer 有 4200 字符时仍提取 0 页。需验证修复后的 `for(;;)` + `inString` 跟踪逻辑是否正确工作，添加 buffer 内容日志定位根因
+- [ ] **[Medium] `elements` 变量每次渲染重新创建**：`const elements = activePage?.elements ?? []` 在 useEffect 依赖中会导致每次渲染触发自动保存。改用 `useMemo` 或从 store selector 获取
+- [ ] **[Medium] SSE 事件解析边界情况**：`sseBuffer.split('\n\n')` 在 chunk 边界恰好切断 `\n\n` 时可能丢事件。需验证 `events.pop()` 保留不完整片段的逻辑
 
-### 1.2 验证
+### 1.2 样式检查
 
-- [x] `npx tsc --noEmit` 零类型错误
+- [ ] **[Low] `<img>` 标签警告**：第 111 行使用 `<img>` 而非 Next.js `<Image />`，影响 LCP 性能。此为历史记录缩略图，影响较小，可添加 eslint-disable 注释
+- [ ] **[Low] 按钮加载状态样式**：`streamProgress` 显示在按钮内，长时间生成时按钮文字过长可能溢出。检查 `truncate` 或 `max-width` 处理
 
----
+### 1.3 测试验证
 
-## M2：后端 AI 接口改造
-
-**目标**：SYSTEM_PROMPT 要求多页输出，响应格式改为 pages 数组
-**文件**：`apps/web/app/api/ai/generate/route.ts`
-
-### 2.1 SYSTEM_PROMPT 改造
-
-- [x] 重写 SYSTEM_PROMPT：要求生成 3-5 个页面，玻璃拟态风格
-- [x] JSON 格式改为 `{ app, style, pages: [{ id, name, description, canvas, elements }] }`
-- [x] 每页要求：状态栏 (y=0,h=44)、底部标签栏 (y=729,h=83)、8-12 个元素
-- [x] 强制中文文字、picsum.photos 图片、不溢出画布
-
-### 2.2 响应校验改造
-
-- [x] 修改 `designData` 校验逻辑：检查 `pages` 数组而非 `elements`
-- [x] 每个 page 内的 elements 做字段完整性校验
-- [x] 为每个 page 生成默认 id（如果 AI 没返回）
-- [x] `canvasSize` 参数应用到每个 page 的 canvas
-
-### 2.3 数据库存储
-
-- [x] `design` 字段存储新格式 `{ app, style, pages[] }`
-- [x] `response` 字段存储原始 AI 响应
-- [x] `tokensUsed` 计算保持不变
-
-### 2.4 验证
-
-- [ ] curl 测试：POST `/api/ai/generate` 返回多页结构
-- [ ] 验证每个 page 有 id/name/elements
-- [ ] 验证元素校验过滤畸形数据
+- [ ] 输入 prompt → 点击"开始设计" → 按钮变为"AI 正在生成中... Xs" → 首页到达后自动跳转编辑器
 
 ---
 
-## M3：Editor Store 多页改造
+## T2：后端 API (`apps/web/app/api/ai/generate/route.ts`)
 
-**目标**：Store 从单页 elements 改为多页 pages 结构
-**文件**：`apps/web/app/stores/editor.ts`
+**目标**：SSE 流式响应正确推送 page 事件，增量解析可靠提取页面
 
-### 3.1 状态结构改造
+### 2.1 代码 Bug
 
-- [x] `EditorState` 新增 `pages: DesignPage[]` 和 `activePageId: string`
-- [x] 移除顶层 `elements` 字段（迁移到 page 内部）
-- [x] `initialState` 初始化空 pages 数组
+- [ ] **[Critical] 增量 JSON 解析器可靠性**：`buffer.indexOf('"pages"')` 依赖精确匹配，若 GLM 返回的 JSON 中 key 带空格（如 `"pages" :`）则找不到。已改为 `indexOf` 但仍需端到端测试验证
+- [ ] **[Medium] fallback 整体解析的 buffer 残留**：增量解析后 `buffer` 可能残留不完整 JSON，fallback 解析时 `JSON.parse` 会失败。需确保 fallback 时 buffer 是完整 JSON
+- [ ] **[Medium] `reasoning_content` 污染风险**：当前只读 `delta.content`，但若 GLM 某次更新改变字段名会静默失败。添加 `delta.reasoning_content` 检测日志
+- [ ] **[Low] 数据库保存 fire-and-forget**：`prisma.aIGeneration.create().catch(() => {})` 静默吞掉错误，生产环境应至少 log
 
-### 3.2 页面操作方法
+### 2.2 样式/规范检查
 
-- [x] `setPages(pages)` — 设置所有页面，自动设置第一个为活跃页
-- [x] `addPage(page)` — 添加新页面
-- [x] `removePage(pageId)` — 删除页面（至少保留 1 页）
-- [x] `setActivePage(pageId)` — 切换活跃页面，同步 canvas 尺寸
-- [x] `updatePage(pageId, updates)` — 更新页面名称/描述
-- [x] `getActivePage()` — 获取当前活跃页面对象
+- [ ] **[Low] SYSTEM_PROMPT 元素数量**：PRD 要求 6-8 个元素，SYSTEM_PROMPT 写的也是 6-8，一致。确认无误
 
-### 3.3 元素操作适配
+### 2.3 测试验证
 
-- [x] `addElement` — 作用于 `activePage.elements`
-- [x] `addElements` — 批量添加到 `activePage.elements`
-- [x] `updateElement` — 在 `activePage.elements` 中查找并更新
-- [x] `deleteElement` — 从 `activePage.elements` 中删除
-- [x] `selectElement` / `clearSelection` — 保持不变
-
-### 3.4 历史记录适配
-
-- [x] `saveHistory` — 保存整个 `pages` 数组的快照
-- [x] `undo` / `redo` — 恢复整个 `pages` 状态
-- [x] 历史记录按操作而非按页面隔离
-
-### 3.5 导入导出适配
-
-- [x] `importState` — 兼容旧格式 `{ elements, canvas }` → 自动转为单页
-- [x] `exportState` — 导出 `{ pages, activePageId, canvas }`
-- [x] `clear` — 重置 pages 为空数组
-
-### 3.6 验证
-
-- [x] `npx tsc --noEmit` 零类型错误
-- [x] 单页旧数据能正确导入
+- [ ] `curl -N` 流式请求 → 收到 `progress` 心跳 → 收到 `page` 事件（含 elements）→ 收到 `done` 事件
+- [ ] 验证 buffer 日志：`[AI] stream done: 3 pages` 而非 `0 pages`
 
 ---
 
-## M4：Canvas 画布页面切换
+## T3：编辑器 Store (`apps/web/app/stores/editor.ts`)
 
-**目标**：Canvas 支持页面标签栏切换，只渲染当前页面元素
-**文件**：`apps/web/app/components/editor/canvas.tsx`
+**目标**：多页状态管理正确，历史记录/撤销/重做正常
 
-### 4.1 页面标签栏
+### 3.1 代码 Bug
 
-- [x] 画布顶部新增页面切换标签栏
-- [x] 标签显示页面名称，当前页高亮（紫色背景）
-- [x] 标签栏支持横向滚动（页面多时）
-- [x] 新增"添加页面"按钮（+ 号）
+- [ ] **[Medium] `setElements` 无条件保存历史**：第 480 行 `saveHistory('Set Elements')` 在 `activePageId` 为空时仍执行，会保存一个空状态快照。改为仅在有 activePage 时保存
+- [ ] **[Medium] `importState` 类型不安全**：`state.elements` 在新类型定义中是 `EditorElement[]`，但 `importState` 参数类型 `Partial<EditorState> & { elements?: EditorElement[] }` 可能传入 `pages` 和 `elements` 同时存在的情况，导致 `elements` 被忽略
+- [ ] **[Low] `saveHistory` 快照深拷贝性能**：`JSON.parse(JSON.stringify(state.pages))` 对大页面数组（50+ 元素 × 5 页）可能卡顿。暂可接受，后续可用 `structuredClone` 替代
 
-### 4.2 元素渲染适配
+### 3.2 功能检查
 
-- [x] `CanvasElement` 渲染 `activePage.elements` 而非顶层 `elements`
-- [x] `elements.map` 改为 `activePage?.elements.map`
-- [x] 空状态提示：当 pages 为空时显示引导
+- [ ] **[Medium] `setActivePage` 切换页面时清空选区**：当前实现正确（`selectedElementIds: []`），确认不影响其他操作
+- [ ] **[Low] `removePage` 至少保留 1 页**：当前实现正确，确认边界行为
 
-### 4.3 画布定位适配
+### 3.3 测试验证
 
-- [x] 切换页面时重置画布居中位置
-- [x] canvas 尺寸跟随当前 page 的 canvas 配置
-- [x] 网格背景适配当前页面尺寸
-
-### 4.4 页面缩略图侧栏（可选）
-
-- [ ] 左侧或底部显示所有页面的缩略预览
-- [ ] 点击缩略图切换到对应页面
-
-### 4.5 验证
-
-- [ ] 页面标签栏正确显示和切换
-- [ ] 切换页面后画布内容更新
-- [ ] 添加/删除页面功能正常
+- [ ] 添加 3 个页面 → 切换页面 → 元素隔离（各页面独立）
+- [ ] 操作 → 撤销 → 重做 → 页面状态正确恢复
 
 ---
 
-## M5：AI 生成页改造
+## T4：画布组件 (`apps/web/app/components/editor/canvas.tsx`)
 
-**目标**：处理多页 AI 响应，正确加载到编辑器
-**文件**：`apps/web/app/design/ai/page.tsx`
+**目标**：多页标签栏切换、元素渲染正确、画布交互正常
 
-### 5.1 响应处理改造
+### 4.1 代码 Bug
 
-- [x] `handleGenerate` 解析 `result.data.design.pages` 数组
-- [x] 调用 `setPages(pages)` 替代逐个 `addElements`
-- [x] 调用 `setActivePage(pages[0].id)` 设置默认页
-- [x] Toast 显示 "AI 生成了 X 个页面，共 Y 个元素"
+- [ ] **[Medium] 初始居中 effect 缺少依赖**：第 135 行 `useEffect` 依赖 `[]` 但读取 `canvas.width/height/zoom`，切换页面后画布尺寸变化不会重新居中。依赖应加 `canvas.width, canvas.height, canvas.zoom`
+- [ ] **[Low] `<img>` 标签警告**：第 60 行元素渲染中使用 `<img>`，同 T1.2 处理
 
-### 5.2 历史记录适配
+### 4.2 样式检查
 
-- [x] 历史列表显示页面数量而非元素数量
-- [x] `loadDesign` 从历史加载时使用 `setPages`
-- [x] 缩略图 `DesignThumbnail` 显示多页预览
+- [ ] **[Medium] 页签栏样式**：检查页签栏在页面数量多时的横向滚动表现，确保 `overflow-x-auto` 生效
+- [ ] **[Low] 空状态引导**：当 `pages` 为空时显示引导文字，检查样式是否与整体风格一致
 
-### 5.3 设置面板
+### 4.3 测试验证
 
-- [ ] 设备尺寸选择器：传给后端 `canvasSize` 参数
-- [ ] 风格选择器：传给后端 `style` 参数
-- [ ] 优化模式：追加页面而非追加元素
-
-### 5.4 验证
-
-- [ ] AI 生成 → 编辑器显示页面标签栏
-- [ ] 历史记录加载 → 恢复多页状态
+- [ ] 添加新页面 → 标签栏出现新 tab → 画布切换到新页面
+- [ ] 切换页面 → 元素列表更新 → 画布尺寸跟随页面配置
 
 ---
 
-## M6：编辑器页面改造
+## T5：编辑器页面 (`apps/web/app/design/editor/page.tsx`)
 
-**目标**：编辑器工具栏适配多页结构
-**文件**：`apps/web/app/design/editor/page.tsx`
+**目标**：工具栏、快捷键、自动保存、代码导出适配多页
 
-### 6.1 工具栏适配
+### 5.1 代码 Bug
 
-- [x] 顶部状态栏显示当前页面名称
-- [x] 元素计数显示当前页面的元素数量
-- [x] 保存按钮保存所有页面数据
+- [ ] **[Medium] `elements` 变量每次渲染重新创建**：第 55 行 `const elements = activePage?.elements ?? []`，第 79 行 `useEffect` 依赖 `elements` 会每次触发自动保存。用 `useEditorStore(s => s.pages.find(...)?.elements ?? [])` 或 `useMemo` 修复
+- [ ] **[Medium] `handleSave` 闭包陈旧**：第 92 行 `useEffect` 内的 `handleSave` 引用了外部函数，但依赖数组只有 `[canUndo, canRedo, undo, redo, showToast]`，缺少 `handleSave`。将 `handleSave` 移入 effect 内或用 `useCallback` 包裹
+- [ ] **[Low] 快捷键 effect 依赖不完整**：eslint-disable 注释压制了 `react-hooks/exhaustive-deps` 警告，但 `handleSave` 确实缺失
 
-### 6.2 快捷键适配
+### 5.2 样式检查
 
-- [x] Ctrl+S 保存整个项目（所有页面）
-- [x] Ctrl+Z / Ctrl+Y 撤销/重做（整个 pages 状态）
-- [x] Delete 删除当前页面选中的元素
+- [ ] **[Low] 工具栏页面名称显示**：检查当前页面名称是否在顶部状态栏正确显示
+- [ ] **[Low] 导出格式选择器样式**：检查 react/vue/html 三个按钮的视觉一致性
 
-### 6.3 自动保存适配
+### 5.3 测试验证
 
-- [x] `saveProject` 保存 `{ pages, activePageId, canvas }`
-- [x] `loadProject` 恢复多页状态
-- [x] 旧格式项目数据自动转换
-
-### 6.4 验证
-
-- [ ] 多页项目保存后重新加载正常
-- [ ] 撤销/重做跨页面正常工作
+- [ ] Ctrl+S → 项目保存 → 刷新页面 → 恢复所有页面
+- [ ] Ctrl+Z → 撤销操作 → Ctrl+Y → 重做
 
 ---
 
-## M7：属性面板与组件库适配
+## T6：属性面板 (`apps/web/app/components/editor/properties-panel.tsx`)
 
-**目标**：属性面板显示当前页面选中元素的属性
-**文件**：`apps/web/app/components/editor/properties-panel.tsx`, `component-library.tsx`
+**目标**：正确读写当前活跃页面的选中元素属性
 
-### 7.1 属性面板
+### 6.1 代码 Bug
 
-- [x] 从 `activePage.elements` 中查找选中元素
-- [x] 修改元素属性时更新到 `activePage.elements`
-- [ ] 页面无选中元素时显示页面信息（名称、尺寸）
+- [ ] **[Medium] `getActivePage()` 在渲染期间调用**：第 35 行 `const elements = getActivePage()?.elements ?? []` 直接在渲染函数中调用 store 方法，绕过了 Zustand 的订阅机制，activePage 变化时组件不会重新渲染。应改为 selector：`useEditorStore(s => s.pages.find(p => p.id === s.activePageId)?.elements ?? [])`
+- [ ] **[Low] `selectedElement` 可能为 undefined**：`elements.find()` 可能返回 undefined，后续 `selectedElement.type` 访问会崩溃。当前有 `if (selectedElement)` 守卫，确认所有分支覆盖
 
-### 7.2 组件库
+### 6.2 样式检查
 
-- [x] 拖拽组件到画布时添加到 `activePage.elements`
-- [x] 组件库不受多页影响，逻辑不变
+- [ ] **[Low] 属性面板空状态**：无选中元素时显示"选择元素查看属性"，检查样式
 
-### 7.3 验证
+### 6.3 测试验证
 
-- [ ] 选中元素 → 属性面板正确显示
-- [ ] 修改属性 → 画布实时更新
+- [ ] 选中元素 → 属性面板显示正确属性 → 修改属性 → 画布实时更新
 
 ---
 
-## M8：导出代码生成改造
+## T7：组件库 (`apps/web/app/components/editor/component-library.tsx`)
 
-**目标**：导出代码支持多页
-**文件**：`apps/web/app/design/editor/page.tsx`（导出函数部分）
+**目标**：拖拽组件添加到当前活跃页面
 
-### 8.1 React 导出
+### 7.1 代码 Bug
 
-- [x] 每个 page 生成一个独立组件
-- [x] 导出为多文件或单文件多组件
+- [ ] **[Medium] 元素计数使用 `getState()`**：第 397 行 `useEditorStore.getState().getActivePage()?.elements.length` 使用 `getState()` 不会触发重渲染。改为 selector 方式
+- [ ] **[Low] 拖拽添加元素**：确认 `addElement` 正确代理到 `_ensureActivePage()`
 
-### 8.2 Vue 导出
+### 7.2 测试验证
 
-- [x] 每个 page 生成一个 Vue SFC
-
-### 8.3 HTML 导出
-
-- [x] 所有 page 横向排列，每行 3 个
-- [x] 每个 page 带 375x812 手机边框
-- [ ] 包含状态栏和底部标签栏
-
-### 8.4 验证
-
-- [ ] 导出 HTML 在浏览器中正确显示多页预览
-- [ ] 导出的 React/Vue 代码可编译
+- [ ] 拖拽按钮到画布 → 元素出现在当前页面 → 切换页面 → 新页面无此元素
 
 ---
 
-## M9：工作区项目管理适配
+## T8：工作区 (`apps/web/app/workspace/page.tsx`)
 
-**目标**：工作区正确加载和显示多页项目
-**文件**：`apps/web/app/workspace/page.tsx`, `apps/web/app/api/projects/route.ts`
+**目标**：正确加载和显示多页项目
 
-### 9.1 API 适配
+### 8.1 代码 Bug
 
-- [x] `POST /api/projects` 保存多页数据 `{ pages, activePageId }`
-- [x] `POST /api/projects` 项目不存在时自动创建（已修复）
-- [x] 旧格式 `{ elements, canvas }` 加载时自动转为单页
+- [ ] **[Medium] `openProject` 多页格式判断**：检查 `data.pages && Array.isArray(data.pages)` 是否覆盖所有情况，包括 `pages: []` 空数组
+- [ ] **[Low] 项目卡片信息**：当前未显示页面数量，用户无法区分单页和多页项目
 
-### 9.2 工作区页面
+### 8.2 样式检查
 
-- [ ] 项目卡片显示页面数量
-- [x] `openProject` 使用 `importState` 加载多页数据
+- [ ] **[Low] 项目卡片布局**：检查多页项目在卡片中的展示样式
 
-### 9.3 验证
+### 8.3 测试验证
 
-- [ ] 保存多页项目 → 工作区显示 → 打开 → 编辑器恢复多页
+- [ ] 保存多页项目 → 工作区显示 → 打开 → 编辑器恢复多页状态
 
 ---
 
-## M10：HTML 多页预览
+## T9：项目 API (`apps/web/app/api/projects/route.ts`)
 
-**目标**：生成高质量多页 HTML 预览文件
-**文件**：`dev_test/` 目录
+**目标**：保存/加载多页项目数据
 
-### 10.1 预览模板
+### 9.1 代码 Bug
 
-- [ ] 每行 3 个手机框（375x812 + 1px 描边）
-- [ ] 玻璃拟态深色背景
-- [ ] 每个手机框内渲染一个完整页面
-- [ ] 超出 3 页自动换行
+- [ ] **[Medium] 项目不存在时降级创建**：`catch` 块捕获所有错误而非仅 `RecordNotFound`，可能掩盖其他数据库错误。应检查错误码
+- [ ] **[Low] 更新与创建的字段一致性**：降级创建时 `ownerId` 字段与更新时的 `where: { id }` 逻辑不对称
 
-### 10.2 页面内容
+### 9.2 测试验证
 
-- [ ] 状态栏：时间、信号、电池
-- [ ] 底部标签栏：4-5 个 tab
-- [ ] 中间内容区：渲染所有元素
-
-### 10.3 验证
-
-- [ ] 浏览器打开 HTML 正确显示多页预览
-- [ ] 图片加载正常（picsum.photos）
+- [ ] POST 保存多页数据 → GET 加载 → 数据完整
 
 ---
 
-## M11：全局测试与回归验证
+## T10：类型定义 (`apps/web/app/types/index.ts`)
 
-**目标**：确保所有功能正常，无回归
+**目标**：类型完整、一致、无冗余
 
-### 11.1 类型检查
+### 10.1 类型检查
 
-- [x] `npx tsc --noEmit` 零类型错误
-- [ ] `npm run lint` 零错误零警告
+- [ ] **[Medium] `DesignSnapshot` 与 `EditorState` 字段对齐**：`DesignSnapshot` 有 `elements?` 和 `pages?`，但 `EditorState` 只有 `pages`。确认 `DesignSnapshot` 仅用于快照场景
+- [ ] **[Low] `AIGeneration.design` 联合类型**：`DesignOutput | MultiPageDesignOutput`，消费端需用类型守卫区分。确认所有消费端正确处理
 
-### 11.2 功能测试
+### 10.2 验证
 
-- [ ] AI 生成多页设计 → 编辑器正确显示
-- [x] 页面标签栏切换正常
-- [x] 元素拖拽、选中、删除正常
-- [x] 属性面板编辑正常
-- [x] 保存/加载项目正常
-- [x] 撤销/重做正常
-- [x] 导出代码正常
+- [ ] `npx tsc --noEmit` 零类型错误（当前已通过）
 
-### 11.3 兼容性测试
+---
 
-- [x] 旧单页项目数据能正确加载
-- [ ] 旧 AI 历史记录能正确显示
+## T11：全局测试与验证
+
+**目标**：端到端流程正常，无回归
+
+### 11.1 Lint 检查
+
+- [ ] `npm run lint` 零 error（当前有 3 个 warning：2 个 img 标签、1 个 useEffect 依赖）
+
+### 11.2 端到端流程
+
+- [ ] **完整流程**：`/design/ai` 输入 prompt → 点击开始 → 按钮计时 → 首页到达跳转编辑器 → 后续页追加 tab → done toast
+- [ ] **编辑器操作**：切换页面 → 添加元素 → 修改属性 → 删除 → 撤销/重做
+- [ ] **保存加载**：保存项目 → 刷新 → 加载 → 多页状态完整恢复
+- [ ] **代码导出**：导出 React/Vue/HTML → 代码包含所有页面
+
+### 11.3 兼容性
+
+- [ ] 旧单页项目数据 → `importState` 自动转为单页 → 正常编辑
+- [ ] 旧 AI 历史记录 → 正确显示（单页格式）
 
 ### 11.4 边界测试
 
-- [x] 空项目（0 页面）不崩溃
-- [x] 单页项目正常工作
-- [ ] 5 页项目性能正常
+- [ ] 空项目（0 页面）→ 不崩溃 → `_ensureActivePage` 自动创建
+- [ ] 5 页 × 10 元素 → 性能正常 → 撤销/重做不卡顿
 
 ---
 
-## 执行顺序
+## 修复优先级排序
 
 ```
-M1 (类型定义) ← 最先执行，后续模块依赖
-    ↓
-M2 (后端 AI) ← 与 M3 并行
-    ↓
-M3 (Store 改造) ← 核心，M4/M5/M6 依赖
-    ↓
-M4 (Canvas) + M5 (AI 页面) + M6 (编辑器) ← 依赖 M3，可并行
-    ↓
-M7 (属性面板) + M8 (导出) + M9 (工作区) ← 依赖 M4/M5/M6
-    ↓
-M10 (HTML 预览) ← 依赖 M8
-    ↓
-M11 (全局测试) ← 最后执行
+第一轮（阻塞核心流程）：
+  T2.1 增量解析器 0 页修复 → T1.1 SSE 事件处理验证 → T3.1 Store 逻辑
+
+第二轮（渲染正确性）：
+  T4.1 画布 effect 依赖 → T5.1 编辑器 elements 每次渲染 → T6.1 属性面板 selector
+
+第三轮（体验优化）：
+  T7.1 组件库 selector → T8.1 工作区 → T9.1 API 容错 → T10.1 类型对齐
+
+第四轮（全局验证）：
+  T11 Lint + 端到端 + 兼容性 + 边界测试
 ```
 
 ---
 
 ## 进度跟踪
 
-| 模块 | 总任务 | 已完成 | 进度 |
+| 阶段 | 总任务 | 已完成 | 进度 |
 |------|--------|--------|------|
-| M1 | 5 | 5 | 100% |
-| M2 | 8 | 8 | 100% |
-| M3 | 10 | 10 | 100% |
-| M4 | 8 | 8 | 100% |
-| M5 | 7 | 7 | 100% |
-| M6 | 8 | 8 | 100% |
-| M7 | 5 | 4 | 80% |
-| M8 | 5 | 4 | 80% |
-| M9 | 4 | 3 | 75% |
-| M10 | 4 | 0 | 0% |
-| M11 | 6 | 5 | 83% |
-| **总计** | **70** | **60** | **86%** |
-
----
-
-## 备注
-
-- 每完成一个 checklist 项，将 `[ ]` 改为 `[x]`
-- 每完成一个模块，更新上方进度表
-- 遇到阻塞问题时，在对应任务下方添加说明
-- 参考文档：`docs/MULTI-PAGE-DESIGN-PLAN.md`
+| T1 | 6 | 0 | 0% |
+| T2 | 5 | 0 | 0% |
+| T3 | 5 | 0 | 0% |
+| T4 | 4 | 0 | 0% |
+| T5 | 5 | 0 | 0% |
+| T6 | 3 | 0 | 0% |
+| T7 | 2 | 0 | 0% |
+| T8 | 3 | 0 | 0% |
+| T9 | 2 | 0 | 0% |
+| T10 | 2 | 0 | 0% |
+| T11 | 6 | 0 | 0% |
+| **总计** | **43** | **0** | **0%** |
