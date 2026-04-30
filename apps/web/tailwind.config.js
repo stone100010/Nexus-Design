@@ -12,7 +12,11 @@ module.exports = {
         accent: '#ec4899',
         dark: '#050507',
         card: '#131316',
-        muted: '#9ca3af'
+        muted: '#9ca3af',
+        foreground: '#ffffff',
+        'card-foreground': '#ffffff',
+        'muted-foreground': '#9ca3af',
+        background: '#050507',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif']

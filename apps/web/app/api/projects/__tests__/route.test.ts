@@ -51,7 +51,7 @@ describe('Projects API', () => {
       vi.mocked(getServerSession).mockResolvedValue(null)
 
       const { GET } = await import('../route')
-      const response = await GET(createMockRequest())
+      const response = await GET()
       const data = await response.json()
 
       expect(data.success).toBe(false)
@@ -73,7 +73,7 @@ describe('Projects API', () => {
       ] as any)
 
       const { GET } = await import('../route')
-      const response = await GET(createMockRequest())
+      const response = await GET()
       const data = await response.json()
 
       expect(data.success).toBe(true)
