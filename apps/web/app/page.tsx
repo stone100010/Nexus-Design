@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
@@ -5,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-dark via-card to-dark">
+    <main id="top" className="min-h-screen bg-gradient-to-br from-dark via-card to-dark">
       {/* Hero Section */}
       <div className="flex flex-col items-center justify-center p-8 pt-20">
         <div className="text-center space-y-6 max-w-4xl">
@@ -252,7 +254,7 @@ export default function Home() {
           <Card className="border-primary/30">
             <CardHeader>
               <CardTitle>📄 产品着陆页</CardTitle>
-              <CardDescription>landing.html</CardDescription>
+              <CardDescription>当前页面</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted space-y-1">
@@ -261,8 +263,8 @@ export default function Home() {
                 <li>• 三层定价方案</li>
                 <li>• 客户案例展示</li>
               </ul>
-              <Button className="w-full mt-4" variant="secondary" asChild>
-                <a href="/demo/landing.html" target="_blank">查看演示</a>
+              <Button className="w-full mt-4" variant="secondary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                回到顶部
               </Button>
             </CardContent>
           </Card>
@@ -270,7 +272,7 @@ export default function Home() {
           <Card className="border-primary/30">
             <CardHeader>
               <CardTitle>🔐 认证系统</CardTitle>
-              <CardDescription>auth.html</CardDescription>
+              <CardDescription>auth</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted space-y-1">
@@ -280,7 +282,7 @@ export default function Home() {
                 <li>• 完整表单验证</li>
               </ul>
               <Button className="w-full mt-4" variant="secondary" asChild>
-                <a href="/demo/auth.html" target="_blank">查看演示</a>
+                <Link href="/auth/login">查看演示</Link>
               </Button>
             </CardContent>
           </Card>
@@ -288,7 +290,7 @@ export default function Home() {
           <Card className="border-primary/30">
             <CardHeader>
               <CardTitle>🎨 设计工作区</CardTitle>
-              <CardDescription>workspace.html</CardDescription>
+              <CardDescription>workspace</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted space-y-1">
@@ -298,7 +300,7 @@ export default function Home() {
                 <li>• AI助手功能</li>
               </ul>
               <Button className="w-full mt-4" variant="secondary" asChild>
-                <a href="/demo/workspace.html" target="_blank">查看演示</a>
+                <Link href="/workspace">查看演示</Link>
               </Button>
             </CardContent>
           </Card>
@@ -435,7 +437,7 @@ export default function Home() {
             </Link>
           </div>
           <p className="text-sm text-muted/60 mt-4">
-            演示账号: demo@nexusdesign.app / NexusDesign123
+            测试账号: next_design@openaigc.fun / demo123_secure
           </p>
         </div>
       </div>
@@ -480,7 +482,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between text-sm text-muted">
             <div className="flex items-center space-x-4 mb-4 md:mb-0">
               <span className="font-semibold text-gray-300">Nexus Design</span>
-              <span>© 2025</span>
+              <span>© {new Date().getFullYear()}</span>
             </div>
             <div className="flex items-center space-x-6">
               <a href="/workspace" className="hover:text-primary transition-colors">工作区</a>

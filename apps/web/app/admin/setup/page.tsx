@@ -37,14 +37,11 @@ export default function AdminSetupPage() {
           <CardContent className="space-y-4">
             <div className="bg-dark/50 p-4 rounded-lg border border-primary/10 font-mono text-sm">
               <p className="text-muted">apps/web/.env.local</p>
-              <p className="mt-2">DATABASE_URL="postgresql://postgres:postgres@localhost:5432/nexusdesign_dev"</p>
-              <p>NEXTAUTH_SECRET="your-secret-key"</p>
+              <p className="mt-2">DATABASE_URL=&quot;postgresql://postgres:postgres@localhost:5432/nexusdesign_dev&quot;</p>
+              <p>NEXTAUTH_SECRET=&quot;your-secret-key&quot;</p>
             </div>
             <div className="flex gap-2">
               <Button asChild>
-                <a href="/demo/landing.html" target="_blank">查看环境变量示例</a>
-              </Button>
-              <Button variant="secondary" asChild>
                 <Link href="/">返回首页</Link>
               </Button>
             </div>
@@ -162,15 +159,15 @@ export default function AdminSetupPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-dark/50 p-4 rounded-lg border border-primary/20">
-                <p className="font-bold text-primary">演示用户</p>
-                <p className="text-sm text-muted mt-1">邮箱: demo@nexusdesign.app</p>
-                <p className="text-sm text-muted">密码: NexusDesign123</p>
+                <p className="font-bold text-primary">测试用户</p>
+                <p className="text-sm text-muted mt-1">邮箱: next_design@openaigc.fun</p>
+                <p className="text-sm text-muted">密码: demo123_secure</p>
                 <p className="text-xs text-muted mt-2">权限: 普通用户</p>
               </div>
               <div className="bg-dark/50 p-4 rounded-lg border border-primary/20">
                 <p className="font-bold text-accent">管理员</p>
-                <p className="text-sm text-muted mt-1">邮箱: admin@nexusdesign.app</p>
-                <p className="text-sm text-muted">密码: Admin123</p>
+                <p className="text-sm text-muted mt-1">邮箱: admin@openaigc.fun</p>
+                <p className="text-sm text-muted">密码: admin123_secure</p>
                 <p className="text-xs text-muted mt-2">权限: 管理员</p>
               </div>
             </div>
