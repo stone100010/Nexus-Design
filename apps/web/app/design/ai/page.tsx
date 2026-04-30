@@ -167,24 +167,21 @@ function AIContent() {
         })
       })
 
-      // 处理特定 HTTP 状态码
+      const result = await response.json()
+
+      // 处理错误状态码
       if (response.status === 401) {
         showToast('请先登录', 'error')
         router.push('/auth/login')
         return
       }
-      if (response.status === 429) {
-        showToast('请求过于频繁，请稍后再试', 'warning')
-        return
-      }
-      if (response.status >= 500) {
-        showToast('AI 服务暂时不可用，请稍后重试', 'error')
+      if (!result.success || response.status >= 400) {
+        const errorMsg = result.error || '生成失败，请稍后重试'
+        showToast(errorMsg, 'error')
         return
       }
 
-      const result = await response.json()
-
-      if (result.success && result.data?.design) {
+      if (result.data?.design) {
         const design = result.data.design
 
         // 更新每日剩余次数
@@ -217,7 +214,7 @@ function AIContent() {
         // 跳转到编辑器
         router.push('/design/editor')
       } else {
-        showToast(result.error || '生成失败', 'error')
+        showToast('AI 未返回有效设计数据，请换个描述试试', 'warning')
       }
     } catch {
       showToast('网络连接失败，请检查网络', 'error')

@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error) {
+    console.error('[AI Generate] Error:', error instanceof Error ? error.message : error)
     // 记录失败的生成
     try {
       const session = await getServerSession(authOptions)
