@@ -10,26 +10,26 @@ async function main() {
   const demoPassword = process.env.NEXUS_DEMO_PASSWORD || 'demo123_secure'
   const adminPassword = process.env.NEXUS_ADMIN_PASSWORD || 'admin123_secure'
 
-  // 创建演示用户
+  // 创建测试用户
   const demoUser = await prisma.user.upsert({
-    where: { email: 'demo@nexusdesign.app' },
+    where: { email: 'next_design@openaigc.fun' },
     update: {},
     create: {
-      email: 'demo@nexusdesign.app',
-      name: '演示用户',
+      email: 'next_design@openaigc.fun',
+      name: '测试用户',
       password: await bcrypt.hash(demoPassword, 12),
       role: 'USER',
       emailVerified: new Date(),
     },
   })
-  console.log('✅ 演示用户已创建:', demoUser.email)
+  console.log('✅ 测试用户已创建:', demoUser.email)
 
   // 创建管理员用户
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@nexusdesign.app' },
+    where: { email: 'admin@openaigc.fun' },
     update: {},
     create: {
-      email: 'admin@nexusdesign.app',
+      email: 'admin@openaigc.fun',
       name: '管理员',
       password: await bcrypt.hash(adminPassword, 12),
       role: 'ADMIN',
@@ -88,11 +88,11 @@ async function main() {
   console.log('✅ 示例版本已创建')
 
   console.log('\n🎉 数据库种子数据填充完成！')
-  console.log('\n演示账号信息:')
-  console.log('邮箱: demo@nexusdesign.app')
+  console.log('\n测试账号信息:')
+  console.log('邮箱: next_design@openaigc.fun')
   console.log('密码:', process.env.NEXUS_DEMO_PASSWORD || 'demo123_secure')
   console.log('\n管理员账号信息:')
-  console.log('邮箱: admin@nexusdesign.app')
+  console.log('邮箱: admin@openaigc.fun')
   console.log('密码:', process.env.NEXUS_ADMIN_PASSWORD || 'admin123_secure')
 }
 

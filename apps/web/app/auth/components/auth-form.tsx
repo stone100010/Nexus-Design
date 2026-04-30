@@ -20,7 +20,7 @@ interface FieldErrors {
 
 export function AuthForm({ type }: AuthFormProps) {
   const router = useRouter()
-  const { setToast } = useUIStore()
+  const { showToast } = useUIStore()
 
   const [formData, setFormData] = useState({
     name: '',
@@ -68,9 +68,9 @@ export function AuthForm({ type }: AuthFormProps) {
         })
 
         if (result?.error) {
-          setToast({ message: '邮箱或密码错误', type: 'error' })
+          showToast('邮箱或密码错误', 'error')
         } else {
-          setToast({ message: '登录成功！', type: 'success' })
+          showToast('登录成功！', 'success')
           router.push('/workspace')
         }
       } else {
@@ -81,19 +81,19 @@ export function AuthForm({ type }: AuthFormProps) {
         })
 
         if (response.ok) {
-          setToast({ message: '注册成功！请登录', type: 'success' })
+          showToast('注册成功！请登录', 'success')
           router.push('/auth/login')
         } else {
           const data = await response.json()
           if (data.error?.includes('already exists') || data.error?.includes('已被注册')) {
-            setToast({ message: '该邮箱已被注册', type: 'error' })
+            showToast('该邮箱已被注册', 'error')
           } else {
-            setToast({ message: data.error || '注册失败', type: 'error' })
+            showToast(data.error || '注册失败', 'error')
           }
         }
       }
     } catch {
-      setToast({ message: '网络连接失败，请检查网络', type: 'error' })
+      showToast('网络连接失败，请检查网络', 'error')
     } finally {
       setLoading(false)
     }
@@ -104,35 +104,18 @@ export function AuthForm({ type }: AuthFormProps) {
     await signIn(provider, { callbackUrl: '/workspace' })
   }
 
-  // 演示登录（仅开发环境）
-  const demoLogin = async () => {
+  // 填充演示账号（仅开发环境）
+  const demoLogin = () => {
     if (process.env.NODE_ENV !== 'development') {
-      setToast({ message: '演示登录仅在开发环境可用', type: 'error' })
+      showToast('演示登录仅在开发环境可用', 'error')
       return
     }
-    
-    setLoading(true)
-    try {
-      // 从环境变量获取演示密码，或使用默认值
-      const demoPassword = process.env.NEXUS_DEMO_PASSWORD || 'demo123'
-      
-      const result = await signIn('credentials', {
-        email: 'demo@nexusdesign.app',
-        password: demoPassword,
-        redirect: false,
-      })
-
-      if (result?.error) {
-        setToast({ message: '演示登录失败，请重试', type: 'error' })
-      } else {
-        setToast({ message: '演示账号登录成功！', type: 'success' })
-        router.push('/workspace')
-      }
-    } catch {
-      setToast({ message: '演示登录失败', type: 'error' })
-    } finally {
-      setLoading(false)
-    }
+    setFormData({
+      email: 'next_design@openaigc.fun',
+      password: 'demo123_secure',
+      name: '',
+    })
+    showToast('已填充测试账号，请点击登录', 'info')
   }
 
   return (

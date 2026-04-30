@@ -47,16 +47,16 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // 演示账号 - 检查环境变量中的演示密码（仅开发环境）
+        // 测试账号 - 仅开发环境
         if (
           process.env.NODE_ENV === 'development' &&
-          credentials.email === 'demo@nexusdesign.app' &&
-          credentials.password === process.env.NEXUS_DEMO_PASSWORD
+          credentials.email === 'next_design@openaigc.fun' &&
+          credentials.password === (process.env.NEXUS_DEMO_PASSWORD || 'demo123_secure')
         ) {
           return {
             id: 'demo-user',
             email: credentials.email,
-            name: 'Demo User',
+            name: '测试用户',
             role: 'USER',
           }
         }
