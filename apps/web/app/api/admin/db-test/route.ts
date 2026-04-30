@@ -8,26 +8,29 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action') || 'status'
 
     switch (action) {
-      case 'connection':
+      case 'connection': {
         const connectionResult = await testDatabaseConnection()
         return NextResponse.json(connectionResult)
+      }
 
-      case 'stats':
+      case 'stats': {
         const statsResult = await getDatabaseStats()
         return NextResponse.json(statsResult)
+      }
 
-      case 'tables':
+      case 'tables': {
         const tablesResult = await checkTablesExist()
         return NextResponse.json(tablesResult)
+      }
 
       case 'status':
-      default:
+      default: {
         const [connection, stats, tables] = await Promise.all([
           testDatabaseConnection(),
           getDatabaseStats(),
           checkTablesExist()
         ])
-        
+
         return NextResponse.json({
           success: connection.success && tables.success,
           connection,
@@ -35,6 +38,7 @@ export async function GET(request: NextRequest) {
           tables,
           timestamp: new Date().toISOString()
         })
+      }
     }
   } catch (error) {
     return NextResponse.json(

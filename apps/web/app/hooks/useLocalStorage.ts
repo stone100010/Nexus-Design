@@ -24,6 +24,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
   // 挂载时读取 localStorage
   useEffect(() => {
     setStoredValue(getInitialValue())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
   // 更新 localStorage
