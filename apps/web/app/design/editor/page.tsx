@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  Activity,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -14,12 +15,14 @@ import {
   Settings as SettingsIcon,
   Sun,
   Trash2,
-  Zap} from 'lucide-react'
+  Zap,
+} from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { useEffect,useState } from 'react'
+import { useCallback, useEffect, useMemo,useState } from 'react'
 
+import { AIStreamStatus, getTotalEstimatedTokens, readAIStreamStatus, subscribeAIStreamStatus } from '@/lib/ai-stream-status'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
@@ -41,7 +44,6 @@ function DesignEditorContent() {
     canUndo,
     canRedo,
     isSaving,
-    getActivePage,
     history,
     selectedElementIds,
     alignElements,
@@ -51,15 +53,20 @@ function DesignEditorContent() {
   } = useEditorStore()
 
   const { showToast } = useUIStore()
-  const activePage = getActivePage()
-  const elements = activePage?.elements ?? []
   const pages = useEditorStore((s) => s.pages)
+  const activePageId = useEditorStore((s) => s.activePageId)
+  const activePage = useMemo(
+    () => pages.find((page) => page.id === activePageId),
+    [pages, activePageId]
+  )
+  const elements = useMemo(() => activePage?.elements ?? [], [activePage])
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCodePreview, setShowCodePreview] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [versions, setVersions] = useState<Record<string, unknown>[]>([])
   const [exportFormat, setExportFormat] = useState<'react' | 'vue' | 'html'>('react')
+  const [aiStreamStatus, setAIStreamStatus] = useState<AIStreamStatus | null>(null)
 
   // 检查认证状态
   useEffect(() => {
@@ -67,6 +74,16 @@ function DesignEditorContent() {
       router.push('/auth/login?redirect=/design/editor')
     }
   }, [status, router])
+
+  useEffect(() => {
+    const current = readAIStreamStatus()
+    if (current?.active) {
+      setAIStreamStatus(current)
+    }
+    return subscribeAIStreamStatus((nextStatus) => {
+      setAIStreamStatus(nextStatus.active ? nextStatus : null)
+    })
+  }, [])
 
   // 自动保存
   useEffect(() => {
@@ -79,14 +96,14 @@ function DesignEditorContent() {
   }, [elements, saveProject])
 
   // 保存处理函数
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     try {
       await saveProject('manual')
       showToast('项目已保存', 'success')
     } catch {
       showToast('保存失败', 'error')
     }
-  }
+  }, [saveProject, showToast])
 
   // 快捷键
   useEffect(() => {
@@ -118,7 +135,7 @@ function DesignEditorContent() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUndo, canRedo, undo, redo, showToast])
+  }, [canUndo, canRedo, handleSave, undo, redo, showToast])
 
   const handleExport = () => {
     let code: string
@@ -428,6 +445,8 @@ ${pageHtml}
     return null
   }
 
+  const aiStreamTokens = getTotalEstimatedTokens(aiStreamStatus)
+
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       {/* 顶部工具栏 */}
@@ -692,6 +711,42 @@ ${pageHtml}
       {isSaving && (
         <div className="absolute top-20 right-4 bg-blue-600/90 backdrop-blur text-white text-xs px-3 py-2 rounded-lg shadow-lg animate-pulse">
           保存中...
+        </div>
+      )}
+
+      {/* AI 生成状态：首屏跳转到编辑器后继续显示 tokens */}
+      {aiStreamStatus && (
+        <div className="fixed left-1/2 top-16 z-[100] w-[min(920px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-cyan-300/40 bg-gray-950/95 p-4 text-white shadow-2xl shadow-cyan-950/40 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-cyan-100">
+              <Activity size={16} className="animate-pulse text-cyan-300" />
+              <span>AI 正在生成</span>
+            </div>
+            <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-200">
+              {aiStreamStatus.pages} 页
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+            <div className="rounded-xl bg-cyan-400/10 px-3 py-2">
+              <div className="text-cyan-200">总 tokens</div>
+              <div className="text-2xl font-bold text-cyan-50">{aiStreamTokens.toLocaleString()}</div>
+            </div>
+            <div className="rounded-xl bg-white/5 px-3 py-2">
+              <div className="text-gray-400">输出</div>
+              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.estimatedTokens.toLocaleString()}</div>
+            </div>
+            <div className="rounded-xl bg-white/5 px-3 py-2">
+              <div className="text-gray-400">字符</div>
+              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.chars.toLocaleString()}</div>
+            </div>
+            <div className="rounded-xl bg-white/5 px-3 py-2">
+              <div className="text-gray-400">耗时</div>
+              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.elapsed}s</div>
+            </div>
+          </div>
+          <div className="mt-3 truncate text-xs text-gray-300">
+            {aiStreamStatus.message}
+          </div>
         </div>
       )}
 

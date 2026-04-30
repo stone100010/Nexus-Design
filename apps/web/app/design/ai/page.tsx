@@ -1,11 +1,12 @@
 'use client'
 
-import { History, Loader2, Send, Sparkles, Wand2 } from 'lucide-react'
+import { Activity, History, Loader2, Send, Sparkles, Wand2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useEffect,useState } from 'react'
 
 import { Navbar } from '@/components/shared/navbar'
+import { getTotalEstimatedTokens, writeAIStreamStatus } from '@/lib/ai-stream-status'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
@@ -21,6 +22,17 @@ interface AIHistory {
   tokensUsed: number
   cost: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
+}
+
+interface StreamStats {
+  elapsed: number
+  chars: number
+  estimatedTokens: number
+  reasoningChars: number
+  reasoningEstimatedTokens: number
+  pages: number
+  firstPageTokens: number | null
+  phase: string
 }
 
 // 判断是否为多页格式
@@ -108,6 +120,7 @@ function DesignThumbnail({ design }: { design: DesignData }) {
                 </div>
               )}
               {el.type === 'image' && (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={String(el.props?.src || '')}
                   className="w-full h-full"
@@ -135,6 +148,54 @@ function DesignThumbnail({ design }: { design: DesignData }) {
   )
 }
 
+function AIStreamTokenBanner({
+  loading,
+  streamProgress,
+  streamStats,
+}: {
+  loading: boolean
+  streamProgress: string
+  streamStats: StreamStats | null
+}) {
+  const totalEstimatedTokens = getTotalEstimatedTokens(streamStats)
+
+  return (
+    <div className="rounded-2xl border-2 border-cyan-300 bg-gray-950 p-4 text-white shadow-2xl shadow-cyan-950/50">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className={cn('flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400/20', loading && 'animate-pulse')}>
+            <Activity size={24} className="text-cyan-200" />
+          </div>
+          <div>
+            <div className="text-sm font-bold tracking-[0.22em] text-cyan-200">AI TOKENS 实时计数</div>
+            <div className="mt-1 text-sm text-gray-200">
+              {streamProgress || (loading ? '等待 AI 返回...' : '待启动：点击“启动 UI 设计”后这里会实时跳 tokens')}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-right">
+          <div className="rounded-xl bg-cyan-400 px-3 py-2 text-gray-950">
+            <div className="text-[10px] font-semibold">总 tokens</div>
+            <div className="text-3xl font-black">{totalEstimatedTokens.toLocaleString()}</div>
+          </div>
+          <div className="rounded-xl bg-white/10 px-3 py-2">
+            <div className="text-[10px] text-gray-400">输出</div>
+            <div className="text-xl font-bold text-gray-100">{(streamStats?.estimatedTokens ?? 0).toLocaleString()}</div>
+          </div>
+          <div className="rounded-xl bg-white/10 px-3 py-2">
+            <div className="text-[10px] text-gray-400">字符</div>
+            <div className="text-xl font-bold text-gray-100">{(streamStats?.chars ?? 0).toLocaleString()}</div>
+          </div>
+          <div className="rounded-xl bg-white/10 px-3 py-2">
+            <div className="text-[10px] text-gray-400">页面</div>
+            <div className="text-xl font-bold text-gray-100">{streamStats?.pages ?? 0}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AIContent() {
   const router = useRouter()
   const { data: session, status } = useSession()
@@ -150,6 +211,8 @@ function AIContent() {
   const [dailyRemaining, setDailyRemaining] = useState<number | null>(null)
   const [dailyLimit, setDailyLimit] = useState<number | null>(null)
   const [streamProgress, setStreamProgress] = useState<string>('')
+  const [streamStats, setStreamStats] = useState<StreamStats | null>(null)
+  const [generationError, setGenerationError] = useState<string>('')
 
   const canvasSizes = {
     iphone: { width: 375, height: 812, label: 'iPhone' },
@@ -173,6 +236,53 @@ function AIContent() {
     '创建一个在线教育APP，包含首页课程推荐、课程详情、学习进度和个人中心',
   ]
 
+  const formatGenerationError = (message: string) => {
+    if (message.includes('401') || message.includes('令牌') || message.toLowerCase().includes('api key')) {
+      return 'AI 服务认证失败：NEXUS_OPENAI_API_KEY 已过期或不正确，请更新 apps/web/.env.local 后重启服务。'
+    }
+    return message || '生成失败，请稍后重试'
+  }
+
+  const updateStreamStats = (data: Partial<StreamStats>) => {
+    setStreamStats((current) => ({
+      elapsed: data.elapsed ?? current?.elapsed ?? 0,
+      chars: data.chars ?? current?.chars ?? 0,
+      estimatedTokens: data.estimatedTokens ?? current?.estimatedTokens ?? 0,
+      reasoningChars: data.reasoningChars ?? current?.reasoningChars ?? 0,
+      reasoningEstimatedTokens: data.reasoningEstimatedTokens ?? current?.reasoningEstimatedTokens ?? 0,
+      pages: data.pages ?? current?.pages ?? 0,
+      firstPageTokens: data.firstPageTokens ?? current?.firstPageTokens ?? null,
+      phase: data.phase ?? current?.phase ?? 'connecting',
+    }))
+  }
+
+  const publishStreamStatus = (stats: StreamStats, message: string, active = true) => {
+    writeAIStreamStatus({
+      active,
+      message,
+      phase: stats.phase,
+      elapsed: stats.elapsed,
+      chars: stats.chars,
+      estimatedTokens: stats.estimatedTokens,
+      reasoningChars: stats.reasoningChars,
+      reasoningEstimatedTokens: stats.reasoningEstimatedTokens,
+      pages: stats.pages,
+      firstPageTokens: stats.firstPageTokens,
+      updatedAt: Date.now(),
+    })
+  }
+
+  const mergeStreamStats = (data: Partial<StreamStats>) => ({
+    elapsed: data.elapsed ?? streamStats?.elapsed ?? 0,
+    chars: data.chars ?? streamStats?.chars ?? 0,
+    estimatedTokens: data.estimatedTokens ?? streamStats?.estimatedTokens ?? 0,
+    reasoningChars: data.reasoningChars ?? streamStats?.reasoningChars ?? 0,
+    reasoningEstimatedTokens: data.reasoningEstimatedTokens ?? streamStats?.reasoningEstimatedTokens ?? 0,
+    pages: data.pages ?? streamStats?.pages ?? 0,
+    firstPageTokens: data.firstPageTokens ?? streamStats?.firstPageTokens ?? null,
+    phase: data.phase ?? streamStats?.phase ?? 'connecting',
+  })
+
   useEffect(() => {
     loadHistory()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,6 +296,19 @@ function AIContent() {
 
     setLoading(true)
     setStreamProgress('')
+    const initialStats = {
+      elapsed: 0,
+      chars: 0,
+      estimatedTokens: 0,
+      reasoningChars: 0,
+      reasoningEstimatedTokens: 0,
+      pages: 0,
+      firstPageTokens: null,
+      phase: 'connecting',
+    }
+    setStreamStats(initialStats)
+    publishStreamStatus(initialStats, '已提交请求，等待 AI 连接...')
+    setGenerationError('')
     try {
       const sizeConfig = canvasSizes[canvasSize]
       const styleDesc = styles[style]
@@ -220,14 +343,18 @@ function AIContent() {
 
       if (!response.ok) {
         const result = await response.json()
-        showToast(result.error || '生成失败', 'error')
+        const message = formatGenerationError(result.error || '生成失败')
+        setGenerationError(message)
+        showToast(message, 'error')
         return
       }
 
       // 读取 SSE 流
       const reader = response.body?.getReader()
       if (!reader) {
-        showToast('响应流异常', 'error')
+        const message = '响应流异常，请重试'
+        setGenerationError(message)
+        showToast(message, 'error')
         return
       }
 
@@ -255,11 +382,26 @@ function AIContent() {
 
             if (data.type === 'progress') {
               setStreamProgress(data.message || 'AI 正在生成中...')
+              const nextStats = mergeStreamStats(data)
+              updateStreamStats(nextStats)
+              publishStreamStatus(nextStats, data.message || 'AI 正在生成中...')
 
             } else if (data.type === 'page') {
               receivedPages++
               const page = data.page as DesignPage
               setStreamProgress(`正在生成第 ${receivedPages} 个页面: ${page.name}`)
+              const nextStats = mergeStreamStats({
+                elapsed: data.elapsed,
+                chars: data.chars,
+                estimatedTokens: data.estimatedTokens,
+                reasoningChars: data.reasoningChars,
+                reasoningEstimatedTokens: data.reasoningEstimatedTokens,
+                pages: receivedPages,
+                firstPageTokens: data.firstPageTokens,
+                phase: receivedPages === 1 ? 'first_page_ready' : 'page_ready',
+              })
+              updateStreamStats(nextStats)
+              publishStreamStatus(nextStats, `第 ${receivedPages} 个页面已返回: ${page.name}`)
 
               useEditorStore.getState().addPage(page)
               if (!firstPageSet) {
@@ -270,6 +412,17 @@ function AIContent() {
               }
 
             } else if (data.type === 'done') {
+              const nextStats = mergeStreamStats({
+                chars: data.chars,
+                estimatedTokens: data.estimatedTokens,
+                reasoningChars: data.reasoningChars,
+                reasoningEstimatedTokens: data.reasoningEstimatedTokens,
+                pages: data.totalPages,
+                firstPageTokens: data.firstPageTokens,
+                phase: 'done',
+              })
+              updateStreamStats(nextStats)
+              publishStreamStatus(nextStats, `生成完成，共 ${data.totalPages} 个页面`, false)
               if (data.dailyRemaining !== undefined) {
                 setDailyRemaining(data.dailyRemaining)
                 setDailyLimit(data.dailyLimit)
@@ -277,7 +430,10 @@ function AIContent() {
               showToast(`AI 生成了 ${data.totalPages} 个页面`, 'success')
 
             } else if (data.type === 'error') {
-              showToast(data.error || '生成失败', 'error')
+              const message = formatGenerationError(data.error || '生成失败')
+              setGenerationError(message)
+              if (streamStats) publishStreamStatus(streamStats, message, false)
+              showToast(message, 'error')
             }
           } catch {
             // 忽略解析错误
@@ -286,14 +442,20 @@ function AIContent() {
       }
 
       if (receivedPages === 0) {
-        showToast('AI 未返回有效数据，请重试', 'warning')
+        const message = generationError || 'AI 未返回有效数据，请重试'
+        setGenerationError(message)
+        showToast(message, 'warning')
       }
 
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        showToast('生成超时，请简化描述后重试', 'error')
+        const message = '生成超时，请简化描述后重试'
+        setGenerationError(message)
+        showToast(message, 'error')
       } else {
-        showToast('网络连接失败', 'error')
+        const message = '网络连接失败，请检查服务日志或网络状态'
+        setGenerationError(message)
+        showToast(message, 'error')
       }
     } finally {
       setLoading(false)
@@ -350,7 +512,13 @@ function AIContent() {
       <Navbar />
 
       {/* 主要内容 */}
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        <AIStreamTokenBanner
+          loading={loading}
+          streamProgress={streamProgress}
+          streamStats={streamStats}
+        />
+
         {/* 标签页切换 */}
         <div className="flex space-x-2 mb-6">
           <button
@@ -476,6 +644,12 @@ function AIContent() {
                 </div>
               )}
 
+              {generationError && (
+                <div className="mt-3 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                  {generationError}
+                </div>
+              )}
+
               <button
                 onClick={handleGenerate}
                 disabled={loading || !prompt.trim() || dailyRemaining === 0}
@@ -490,7 +664,9 @@ function AIContent() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    <span>{streamProgress || '生成中...'}</span>
+                    <span className="max-w-full truncate">
+                      {streamProgress || '生成中...'} · {getTotalEstimatedTokens(streamStats).toLocaleString()} tokens · {(streamStats?.chars ?? 0).toLocaleString()} 字符
+                    </span>
                   </>
                 ) : (
                   <>
