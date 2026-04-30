@@ -2,10 +2,21 @@ import { create } from 'zustand'
 
 import { generateId } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui'
-import { EditorElement, EditorHistory,EditorState } from '@/types'
+import { DesignPage, EditorElement, EditorHistory, EditorState } from '@/types'
 
 interface EditorStore extends EditorState {
-  // Element operations
+  // Internal
+  _ensureActivePage: () => string
+
+  // Page operations
+  setPages: (pages: DesignPage[]) => void
+  addPage: (page: DesignPage) => void
+  removePage: (pageId: string) => void
+  setActivePage: (pageId: string) => void
+  updatePage: (pageId: string, updates: Partial<DesignPage>) => void
+  getActivePage: () => DesignPage | undefined
+
+  // Element operations (act on active page)
   addElement: (element: Omit<EditorElement, 'id'>) => string
   addElements: (elements: Omit<EditorElement, 'id'>[]) => void
   updateElement: (id: string, updates: Partial<EditorElement>) => void
@@ -14,12 +25,12 @@ interface EditorStore extends EditorState {
   deselectElement: (id: string) => void
   clearSelection: () => void
   getSelectedElements: () => EditorElement[]
-  
+
   // Extended element operations
   duplicateElement: (id: string) => void
   bringToFront: (id: string) => void
   sendToBack: (id: string) => void
-  
+
   // Canvas operations
   setCanvas: (canvas: Partial<EditorState['canvas']>) => void
   setCanvasSize: (size: { width: number; height: number }) => void
@@ -27,28 +38,28 @@ interface EditorStore extends EditorState {
   zoomIn: () => void
   zoomOut: () => void
   resetZoom: () => void
-  
+
   // History operations
   saveHistory: (action: string) => void
   undo: () => void
   redo: () => void
   canUndo: () => boolean
   canRedo: () => boolean
-  
+
   // Bulk operations
   setElements: (elements: EditorElement[]) => void
   clear: () => void
   clearCanvas: () => void
-  
+
   // Project operations
   saveProject: (name?: string) => Promise<void>
   loadProject: (name?: string) => Promise<void>
-  
+
   // Loading state
   setSaving: (isSaving: boolean) => void
-  
+
   // Import/Export
-  importState: (state: Partial<EditorState>) => void
+  importState: (state: Partial<EditorState> & { elements?: EditorElement[] }) => void
   exportState: () => EditorState
 
   // Theme
@@ -64,7 +75,8 @@ interface EditorStore extends EditorState {
 }
 
 const initialState: EditorState & { theme: 'dark' | 'light' } = {
-  elements: [],
+  pages: [],
+  activePageId: '',
   selectedElementIds: [],
   canvas: {
     width: 375,
@@ -82,17 +94,104 @@ const initialState: EditorState & { theme: 'dark' | 'light' } = {
 export const useEditorStore = create<EditorStore>((set, get) => ({
   ...initialState,
 
+  // ==================== Page Operations ====================
+
+  setPages: (pages) => {
+    const activePageId = pages.length > 0 ? pages[0].id : ''
+    const activePage = pages[0]
+    set({
+      pages,
+      activePageId,
+      selectedElementIds: [],
+      canvas: activePage
+        ? { ...get().canvas, width: activePage.canvas.width, height: activePage.canvas.height }
+        : get().canvas,
+    })
+  },
+
+  addPage: (page) => {
+    set((state) => ({
+      pages: [...state.pages, page],
+    }))
+  },
+
+  removePage: (pageId) => {
+    const { pages, activePageId } = get()
+    if (pages.length <= 1) return // 至少保留 1 页
+
+    const newPages = pages.filter(p => p.id !== pageId)
+    const newActiveId = pageId === activePageId
+      ? newPages[0].id
+      : activePageId
+
+    const activePage = newPages.find(p => p.id === newActiveId)
+    set({
+      pages: newPages,
+      activePageId: newActiveId,
+      selectedElementIds: [],
+      canvas: activePage
+        ? { ...get().canvas, width: activePage.canvas.width, height: activePage.canvas.height }
+        : get().canvas,
+    })
+    get().saveHistory('Remove Page')
+  },
+
+  setActivePage: (pageId) => {
+    const page = get().pages.find(p => p.id === pageId)
+    if (page) {
+      set({
+        activePageId: pageId,
+        canvas: { ...get().canvas, width: page.canvas.width, height: page.canvas.height },
+        selectedElementIds: [],
+      })
+    }
+  },
+
+  updatePage: (pageId, updates) => {
+    set((state) => ({
+      pages: state.pages.map(p =>
+        p.id === pageId ? { ...p, ...updates } : p
+      ),
+    }))
+  },
+
+  getActivePage: () => {
+    const { pages, activePageId } = get()
+    return pages.find(p => p.id === activePageId)
+  },
+
+  // ==================== Element Operations ====================
+
+  // 确保存在活跃页面，没有则自动创建
+  _ensureActivePage: (): string => {
+    const { pages, activePageId, canvas } = get()
+    if (activePageId && pages.find(p => p.id === activePageId)) return activePageId
+
+    const page: DesignPage = {
+      id: generateId('page'),
+      name: '页面 1',
+      canvas: { width: canvas.width, height: canvas.height },
+      elements: [],
+    }
+    set({ pages: [page], activePageId: page.id })
+    return page.id
+  },
+
   addElement: (element) => {
     const id = generateId('element')
     const newElement = { ...element, id }
+    const pageId = get()._ensureActivePage()
+    const { pages } = get()
 
-    set((state) => ({
-      elements: [...state.elements, newElement],
-    }))
+    set({
+      pages: pages.map(p =>
+        p.id === pageId
+          ? { ...p, elements: [...p.elements, newElement] }
+          : p
+      ),
+    })
 
-    // 保存历史
     get().saveHistory('Add Element')
-
     return id
   },
 
@@ -102,30 +201,45 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       id: generateId('element')
     }))
 
-    set((state) => ({
-      elements: [...state.elements, ...elementsWithIds],
-    }))
+    const pageId = get()._ensureActivePage()
+    const { pages } = get()
+    set({
+      pages: pages.map(p =>
+        p.id === pageId
+          ? { ...p, elements: [...p.elements, ...elementsWithIds] }
+          : p
+      ),
+    })
 
-    // 只存一次历史
     get().saveHistory('Add Elements')
   },
 
   updateElement: (id, updates) => {
-    set((state) => ({
-      elements: state.elements.map((el) =>
-        el.id === id ? { ...el, ...updates } : el
+    const { pages, activePageId } = get()
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId
+          ? {
+              ...p,
+              elements: p.elements.map(el =>
+                el.id === id ? { ...el, ...updates } : el
+              ),
+            }
+          : p
       ),
-    }))
+    })
   },
 
   deleteElement: (id) => {
-    set((state) => ({
-      elements: state.elements.filter((el) => el.id !== id),
-      selectedElementIds: state.selectedElementIds.filter(
-        (selectedId) => selectedId !== id
+    const { pages, activePageId } = get()
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId
+          ? { ...p, elements: p.elements.filter(el => el.id !== id) }
+          : p
       ),
-    }))
-    
+      selectedElementIds: get().selectedElementIds.filter(sid => sid !== id),
+    })
     get().saveHistory('Delete Element')
   },
 
@@ -156,9 +270,81 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   getSelectedElements: () => {
-    const { elements, selectedElementIds } = get()
-    return elements.filter((el) => selectedElementIds.includes(el.id))
+    const activePage = get().getActivePage()
+    const { selectedElementIds } = get()
+    if (!activePage) return []
+    return activePage.elements.filter((el) => selectedElementIds.includes(el.id))
   },
+
+  // ==================== Extended Element Operations ====================
+
+  duplicateElement: (id) => {
+    const activePage = get().getActivePage()
+    if (!activePage) return
+
+    const element = activePage.elements.find((el) => el.id === id)
+    if (!element) return
+
+    const newElement = {
+      ...element,
+      id: generateId('element'),
+      x: element.x + 20,
+      y: element.y + 20,
+    }
+
+    const { pages, activePageId } = get()
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId
+          ? { ...p, elements: [...p.elements, newElement] }
+          : p
+      ),
+    })
+
+    get().saveHistory('Duplicate Element')
+  },
+
+  bringToFront: (id) => {
+    const { pages, activePageId } = get()
+    const activePage = pages.find(p => p.id === activePageId)
+    if (!activePage) return
+
+    const element = activePage.elements.find((el) => el.id === id)
+    if (!element) return
+
+    const filtered = activePage.elements.filter((el) => el.id !== id)
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId
+          ? { ...p, elements: [...filtered, element] }
+          : p
+      ),
+    })
+
+    get().saveHistory('Bring to Front')
+  },
+
+  sendToBack: (id) => {
+    const { pages, activePageId } = get()
+    const activePage = pages.find(p => p.id === activePageId)
+    if (!activePage) return
+
+    const element = activePage.elements.find((el) => el.id === id)
+    if (!element) return
+
+    const filtered = activePage.elements.filter((el) => el.id !== id)
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId
+          ? { ...p, elements: [element, ...filtered] }
+          : p
+      ),
+    })
+
+    get().saveHistory('Send to Back')
+  },
+
+  // ==================== Canvas Operations ====================
 
   setCanvas: (canvas) => {
     set((state) => ({
@@ -195,146 +381,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }))
   },
 
-  saveHistory: (action) => {
-    set((state) => {
-      const newHistory = state.history.slice(0, state.historyIndex + 1)
-      const snapshot: EditorHistory = {
-        timestamp: new Date(),
-        action,
-        state: {
-          elements: JSON.parse(JSON.stringify(state.elements)),
-          selectedElementIds: [...state.selectedElementIds],
-          canvas: { ...state.canvas },
-          history: [], // 不保存历史的历史
-          historyIndex: -1,
-        },
-      }
-      
-      return {
-        history: [...newHistory, snapshot],
-        historyIndex: newHistory.length,
-      }
-    })
-  },
-
-  undo: () => {
-    set((state) => {
-      if (state.historyIndex <= 0) return state
-      
-      const snapshot = state.history[state.historyIndex - 1]
-      return {
-        elements: JSON.parse(JSON.stringify(snapshot.state.elements)),
-        selectedElementIds: [...snapshot.state.selectedElementIds],
-        canvas: { ...snapshot.state.canvas },
-        historyIndex: state.historyIndex - 1,
-      }
-    })
-  },
-
-  redo: () => {
-    set((state) => {
-      if (state.historyIndex >= state.history.length - 1) return state
-      
-      const snapshot = state.history[state.historyIndex + 1]
-      return {
-        elements: JSON.parse(JSON.stringify(snapshot.state.elements)),
-        selectedElementIds: [...snapshot.state.selectedElementIds],
-        canvas: { ...snapshot.state.canvas },
-        historyIndex: state.historyIndex + 1,
-      }
-    })
-  },
-
-  canUndo: () => {
-    const { historyIndex } = get()
-    return historyIndex > 0
-  },
-
-  canRedo: () => {
-    const { historyIndex, history } = get()
-    return historyIndex < history.length - 1
-  },
-
-  setElements: (elements) => {
-    set({ elements })
-    get().saveHistory('Set Elements')
-  },
-
-  clear: () => {
-    set(initialState)
-    get().saveHistory('Clear')
-  },
-
-  importState: (state) => {
-    set({
-      elements: state.elements || [],
-      selectedElementIds: state.selectedElementIds || [],
-      canvas: state.canvas || initialState.canvas,
-      history: state.history || [],
-      historyIndex: state.historyIndex || -1,
-    })
-  },
-
-  exportState: () => {
-    const state = get()
-    return {
-      elements: state.elements,
-      selectedElementIds: state.selectedElementIds,
-      canvas: state.canvas,
-      history: [], // 不导出历史
-      historyIndex: -1,
-    }
-  },
-
-  // Extended element operations
-  duplicateElement: (id) => {
-    const state = get()
-    const element = state.elements.find((el) => el.id === id)
-    if (!element) return
-
-    const newElement = {
-      ...element,
-      id: generateId('element'),
-      x: element.x + 20,
-      y: element.y + 20,
-    }
-
-    set((state) => ({
-      elements: [...state.elements, newElement],
-    }))
-
-    get().saveHistory('Duplicate Element')
-  },
-
-  bringToFront: (id) => {
-    set((state) => {
-      const element = state.elements.find((el) => el.id === id)
-      if (!element) return state
-
-      const filtered = state.elements.filter((el) => el.id !== id)
-      return {
-        elements: [...filtered, element],
-      }
-    })
-
-    get().saveHistory('Bring to Front')
-  },
-
-  sendToBack: (id) => {
-    set((state) => {
-      const element = state.elements.find((el) => el.id === id)
-      if (!element) return state
-
-      const filtered = state.elements.filter((el) => el.id !== id)
-      return {
-        elements: [element, ...filtered],
-      }
-    })
-
-    get().saveHistory('Send to Back')
-  },
-
-  // Canvas operations
   setCanvasSize: (size) => {
     set((state) => ({
       canvas: {
@@ -354,12 +400,152 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }))
   },
 
+  // ==================== History Operations ====================
+
+  saveHistory: (action) => {
+    set((state) => {
+      const newHistory = state.history.slice(0, state.historyIndex + 1)
+      const snapshot: EditorHistory = {
+        timestamp: new Date(),
+        action,
+        state: {
+          pages: JSON.parse(JSON.stringify(state.pages)),
+          activePageId: state.activePageId,
+          selectedElementIds: [...state.selectedElementIds],
+          canvas: { ...state.canvas },
+          history: [],
+          historyIndex: -1,
+        },
+      }
+
+      return {
+        history: [...newHistory, snapshot],
+        historyIndex: newHistory.length,
+      }
+    })
+  },
+
+  undo: () => {
+    set((state) => {
+      if (state.historyIndex <= 0) return state
+
+      const snapshot = state.history[state.historyIndex - 1]
+      return {
+        pages: JSON.parse(JSON.stringify(snapshot.state.pages)),
+        activePageId: snapshot.state.activePageId,
+        selectedElementIds: [...snapshot.state.selectedElementIds],
+        canvas: { ...snapshot.state.canvas },
+        historyIndex: state.historyIndex - 1,
+      }
+    })
+  },
+
+  redo: () => {
+    set((state) => {
+      if (state.historyIndex >= state.history.length - 1) return state
+
+      const snapshot = state.history[state.historyIndex + 1]
+      return {
+        pages: JSON.parse(JSON.stringify(snapshot.state.pages)),
+        activePageId: snapshot.state.activePageId,
+        selectedElementIds: [...snapshot.state.selectedElementIds],
+        canvas: { ...snapshot.state.canvas },
+        historyIndex: state.historyIndex + 1,
+      }
+    })
+  },
+
+  canUndo: () => {
+    const { historyIndex } = get()
+    return historyIndex > 0
+  },
+
+  canRedo: () => {
+    const { historyIndex, history } = get()
+    return historyIndex < history.length - 1
+  },
+
+  // ==================== Bulk Operations ====================
+
+  setElements: (elements) => {
+    // 兼容旧调用：设置到当前活跃页面
+    const { pages, activePageId } = get()
+    if (activePageId) {
+      set({
+        pages: pages.map(p =>
+          p.id === activePageId ? { ...p, elements } : p
+        ),
+      })
+    }
+    get().saveHistory('Set Elements')
+  },
+
+  clear: () => {
+    set({
+      ...initialState,
+      history: [],
+      historyIndex: -1,
+    })
+  },
+
   clearCanvas: () => {
-    set({ elements: [], selectedElementIds: [] })
+    const { pages, activePageId } = get()
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId ? { ...p, elements: [] } : p
+      ),
+      selectedElementIds: [],
+    })
     get().saveHistory('Clear Canvas')
   },
 
-  // Project operations
+  // ==================== Import/Export ====================
+
+  importState: (state) => {
+    // 兼容旧格式：{ elements, canvas } → 转为单页
+    if (state.elements && !state.pages) {
+      const page: DesignPage = {
+        id: generateId('page'),
+        name: '页面 1',
+        canvas: state.canvas || initialState.canvas,
+        elements: state.elements,
+      }
+      set({
+        pages: [page],
+        activePageId: page.id,
+        selectedElementIds: state.selectedElementIds || [],
+        canvas: state.canvas || initialState.canvas,
+        history: state.history || [],
+        historyIndex: state.historyIndex ?? -1,
+      })
+      return
+    }
+
+    // 新格式：{ pages, activePageId, canvas }
+    set({
+      pages: state.pages || [],
+      activePageId: state.activePageId || (state.pages?.[0]?.id ?? ''),
+      selectedElementIds: state.selectedElementIds || [],
+      canvas: state.canvas || initialState.canvas,
+      history: state.history || [],
+      historyIndex: state.historyIndex ?? -1,
+    })
+  },
+
+  exportState: () => {
+    const state = get()
+    return {
+      pages: state.pages,
+      activePageId: state.activePageId,
+      selectedElementIds: state.selectedElementIds,
+      canvas: state.canvas,
+      history: [],
+      historyIndex: -1,
+    }
+  },
+
+  // ==================== Project Operations ====================
+
   saveProject: async (name = 'draft') => {
     set({ isSaving: true })
     const toast = useUIStore.getState().showToast
@@ -367,12 +553,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     try {
       const state = get()
       const projectData = {
-        elements: state.elements,
+        pages: state.pages,
+        activePageId: state.activePageId,
         canvas: state.canvas,
         timestamp: new Date().toISOString(),
       }
 
-      // 优先保存到数据库
       try {
         const existingProjectId = localStorage.getItem('currentProjectId')
 
@@ -399,7 +585,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         // 数据库保存失败，降级到本地存储
       }
 
-      // 降级：保存到 localStorage
       if (typeof window !== 'undefined') {
         localStorage.setItem(`project_${name}`, JSON.stringify(projectData))
       }
@@ -412,7 +597,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   loadProject: async (name = 'draft') => {
-    // 尝试从数据库加载
     try {
       const response = await fetch('/api/projects')
       const result = await response.json()
@@ -421,12 +605,30 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         const latestProject = result.data[0]
         if (latestProject.data) {
           localStorage.setItem('currentProjectId', latestProject.id)
+          const data = latestProject.data
 
-          set({
-            elements: latestProject.data.elements || [],
-            canvas: latestProject.data.canvas || initialState.canvas,
-            selectedElementIds: [],
-          })
+          // 兼容旧格式：{ elements, canvas } → { pages, activePageId }
+          if (data.elements && !data.pages) {
+            const page: DesignPage = {
+              id: generateId('page'),
+              name: '页面 1',
+              canvas: data.canvas || initialState.canvas,
+              elements: data.elements || [],
+            }
+            set({
+              pages: [page],
+              activePageId: page.id,
+              selectedElementIds: [],
+              canvas: data.canvas || initialState.canvas,
+            })
+          } else {
+            set({
+              pages: data.pages || [],
+              activePageId: data.activePageId || data.pages?.[0]?.id || '',
+              selectedElementIds: [],
+              canvas: data.canvas || initialState.canvas,
+            })
+          }
           get().saveHistory('Load Project from Database')
           return
         }
@@ -435,16 +637,31 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       // 从数据库加载失败，尝试本地存储
     }
 
-    // 降级：从 localStorage 加载
     if (typeof window !== 'undefined') {
       const data = localStorage.getItem(`project_${name}`)
       if (data) {
         const project = JSON.parse(data)
-        set({
-          elements: project.elements || [],
-          canvas: project.canvas || initialState.canvas,
-          selectedElementIds: [],
-        })
+        if (project.elements && !project.pages) {
+          const page: DesignPage = {
+            id: generateId('page'),
+            name: '页面 1',
+            canvas: project.canvas || initialState.canvas,
+            elements: project.elements || [],
+          }
+          set({
+            pages: [page],
+            activePageId: page.id,
+            selectedElementIds: [],
+            canvas: project.canvas || initialState.canvas,
+          })
+        } else {
+          set({
+            pages: project.pages || [],
+            activePageId: project.activePageId || project.pages?.[0]?.id || '',
+            selectedElementIds: [],
+            canvas: project.canvas || initialState.canvas,
+          })
+        }
         get().saveHistory('Load Project from LocalStorage')
         return
       }
@@ -457,7 +674,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set({ isSaving })
   },
 
-  // Theme
+  // ==================== Theme ====================
+
   theme: 'dark',
   setTheme: (theme) => {
     set({ theme })
@@ -465,11 +683,15 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     document.documentElement.classList.toggle('light', theme === 'light')
   },
 
-  // Alignment
+  // ==================== Alignment ====================
+
   alignElements: (alignment) => {
-    const state = get()
-    const selected = state.elements.filter((el) =>
-      state.selectedElementIds.includes(el.id)
+    const activePage = get().getActivePage()
+    if (!activePage) return
+
+    const { selectedElementIds } = get()
+    const selected = activePage.elements.filter((el) =>
+      selectedElementIds.includes(el.id)
     )
     if (selected.length < 2) return
 
@@ -532,7 +754,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     get().saveHistory(`Align ${alignment}`)
   },
 
-  // Version management
+  // ==================== Version Management ====================
+
   saveVersion: async (description) => {
     const state = get()
     const toast = useUIStore.getState().showToast
@@ -550,7 +773,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         body: JSON.stringify({
           description: description || `版本保存 - ${new Date().toLocaleString('zh-CN')}`,
           data: {
-            elements: state.elements,
+            pages: state.pages,
+            activePageId: state.activePageId,
             canvas: state.canvas,
           },
         }),
@@ -576,11 +800,29 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
       if (result.success && result.data?.data) {
         const versionData = result.data.data
-        set({
-          elements: versionData.elements || [],
-          canvas: versionData.canvas || initialState.canvas,
-          selectedElementIds: [],
-        })
+
+        // 兼容旧格式
+        if (versionData.elements && !versionData.pages) {
+          const page: DesignPage = {
+            id: generateId('page'),
+            name: '页面 1',
+            canvas: versionData.canvas || initialState.canvas,
+            elements: versionData.elements || [],
+          }
+          set({
+            pages: [page],
+            activePageId: page.id,
+            selectedElementIds: [],
+            canvas: versionData.canvas || initialState.canvas,
+          })
+        } else {
+          set({
+            pages: versionData.pages || [],
+            activePageId: versionData.activePageId || versionData.pages?.[0]?.id || '',
+            selectedElementIds: [],
+            canvas: versionData.canvas || initialState.canvas,
+          })
+        }
         get().saveHistory('Load Version')
         toast('版本已加载', 'success')
       } else {
