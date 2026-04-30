@@ -470,13 +470,15 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   setElements: (elements) => {
     // 兼容旧调用：设置到当前活跃页面
     const { pages, activePageId } = get()
-    if (activePageId) {
-      set({
-        pages: pages.map(p =>
-          p.id === activePageId ? { ...p, elements } : p
-        ),
-      })
+    if (!activePageId || !pages.some(p => p.id === activePageId)) {
+      return
     }
+
+    set({
+      pages: pages.map(p =>
+        p.id === activePageId ? { ...p, elements } : p
+      ),
+    })
     get().saveHistory('Set Elements')
   },
 
@@ -502,13 +504,17 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   // ==================== Import/Export ====================
 
   importState: (state) => {
+    const hasPages = Array.isArray(state.pages)
+    const hasElements = Array.isArray(state.elements)
+
     // 兼容旧格式：{ elements, canvas } → 转为单页
-    if (state.elements && !state.pages) {
+    if (!hasPages && hasElements) {
+      const elements = state.elements ?? []
       const page: DesignPage = {
         id: generateId('page'),
         name: '页面 1',
         canvas: state.canvas || initialState.canvas,
-        elements: state.elements,
+        elements,
       }
       set({
         pages: [page],
@@ -522,11 +528,20 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }
 
     // 新格式：{ pages, activePageId, canvas }
+    const pages = hasPages ? state.pages ?? [] : []
+    const activePageId =
+      state.activePageId && pages.some(p => p.id === state.activePageId)
+        ? state.activePageId
+        : pages[0]?.id ?? ''
+    const activePage = pages.find(p => p.id === activePageId)
+
     set({
-      pages: state.pages || [],
-      activePageId: state.activePageId || (state.pages?.[0]?.id ?? ''),
+      pages,
+      activePageId,
       selectedElementIds: state.selectedElementIds || [],
-      canvas: state.canvas || initialState.canvas,
+      canvas: activePage
+        ? { ...initialState.canvas, ...state.canvas, width: activePage.canvas.width, height: activePage.canvas.height }
+        : state.canvas || initialState.canvas,
       history: state.history || [],
       historyIndex: state.historyIndex ?? -1,
     })

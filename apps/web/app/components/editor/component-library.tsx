@@ -241,6 +241,9 @@ const CATEGORIES = [
 
 export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({ className }) => {
   const { addElement, setCanvasSize, canvas } = useEditorStore()
+  const activeElementCount = useEditorStore((state) =>
+    state.pages.find(page => page.id === state.activePageId)?.elements.length ?? 0
+  )
   const { showToast } = useUIStore()
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -394,7 +397,7 @@ export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({ className })
           <div className="flex justify-between items-center text-sm mt-1">
             <span className="text-gray-300">元素</span>
             <span className="font-mono text-gray-200">
-              {useEditorStore.getState().getActivePage()?.elements.length ?? 0}
+              {activeElementCount}
             </span>
           </div>
         </div>

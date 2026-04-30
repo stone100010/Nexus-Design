@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
+import { DesignPage, EditorElement, EditorState } from '@/types'
 
 interface Project {
   id: string
@@ -19,6 +20,26 @@ interface Project {
   updatedAt: string
   owner: { id: string; name: string | null; email: string }
   _count: { versions: number; comments: number }
+}
+
+function getProjectStats(data: unknown) {
+  if (!data || typeof data !== 'object') {
+    return { pageCount: 0, elementCount: 0 }
+  }
+
+  const projectData = data as { pages?: DesignPage[]; elements?: EditorElement[] }
+  if (Array.isArray(projectData.pages)) {
+    return {
+      pageCount: projectData.pages.length,
+      elementCount: projectData.pages.reduce((sum, page) => sum + (page.elements?.length ?? 0), 0),
+    }
+  }
+
+  if (Array.isArray(projectData.elements)) {
+    return { pageCount: 1, elementCount: projectData.elements.length }
+  }
+
+  return { pageCount: 0, elementCount: 0 }
 }
 
 function WorkspaceContent() {
@@ -73,16 +94,16 @@ function WorkspaceContent() {
       const data = project.data as Record<string, unknown>
 
       // 支持多页格式和旧单页格式
-      if (data.pages && Array.isArray(data.pages)) {
+      if (Array.isArray(data.pages)) {
         importState({
-          pages: data.pages as import('@/types').DesignPage[],
+          pages: data.pages as DesignPage[],
           activePageId: data.activePageId as string || '',
-          canvas: data.canvas as import('@/types').EditorState['canvas'],
+          canvas: data.canvas as EditorState['canvas'],
         })
       } else {
         importState({
-          elements: (data.elements as []) || [],
-          canvas: data.canvas as import('@/types').EditorState['canvas'],
+          elements: (data.elements as EditorElement[]) || [],
+          canvas: data.canvas as EditorState['canvas'],
         })
       }
 
@@ -348,12 +369,15 @@ function WorkspaceContent() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredProjects.map((project) => (
-                  <div
-                    key={project.id}
-                    onClick={() => openProject(project)}
-                    className="group p-4 bg-gray-800/50 rounded-lg border border-gray-700 hover:border-primary/30 cursor-pointer transition-all"
-                  >
+                {filteredProjects.map((project) => {
+                  const stats = getProjectStats(project.data)
+
+                  return (
+                    <div
+                      key={project.id}
+                      onClick={() => openProject(project)}
+                      className="group p-4 bg-gray-800/50 rounded-lg border border-gray-700 hover:border-primary/30 cursor-pointer transition-all"
+                    >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-medium text-gray-200 truncate">
@@ -373,12 +397,21 @@ function WorkspaceContent() {
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                       </button>
                     </div>
+                    <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-400">
+                      <span className="rounded-full bg-gray-900/70 px-2 py-0.5">
+                        {stats.pageCount || 1} 页
+                      </span>
+                      <span className="rounded-full bg-gray-900/70 px-2 py-0.5">
+                        {stats.elementCount} 元素
+                      </span>
+                    </div>
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>{formatDate(project.updatedAt)}</span>
                       <span>{project._count.versions} 个版本</span>
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </CardContent>

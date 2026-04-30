@@ -352,5 +352,90 @@ describe('useEditorStore', () => {
       setActivePage('p1')
       expect(getElements()).toHaveLength(1)
     })
+
+    it('keeps elements isolated across three pages', () => {
+      const { setPages, setActivePage, addElement } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+        { id: 'p2', name: 'Page 2', canvas: { width: 414, height: 896 }, elements: [] },
+        { id: 'p3', name: 'Page 3', canvas: { width: 768, height: 1024 }, elements: [] },
+      ])
+
+      setActivePage('p1')
+      addElement({ type: 'text', x: 0, y: 0, width: 100, height: 20, props: { text: 'P1' }, styles: {} })
+      setActivePage('p2')
+      addElement({ type: 'button', x: 10, y: 10, width: 100, height: 40, props: { text: 'P2' }, styles: {} })
+      setActivePage('p3')
+      addElement({ type: 'input', x: 20, y: 20, width: 180, height: 36, props: { placeholder: 'P3' }, styles: {} })
+
+      const state = useEditorStore.getState()
+      expect(state.pages.find(page => page.id === 'p1')?.elements).toHaveLength(1)
+      expect(state.pages.find(page => page.id === 'p2')?.elements).toHaveLength(1)
+      expect(state.pages.find(page => page.id === 'p3')?.elements).toHaveLength(1)
+      expect(state.canvas.width).toBe(768)
+      expect(state.canvas.height).toBe(1024)
+    })
+
+    it('clears selection when switching pages', () => {
+      const { setPages, setActivePage, addElement, selectElement } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+        { id: 'p2', name: 'Page 2', canvas: { width: 375, height: 812 }, elements: [] },
+      ])
+
+      const id = addElement({ type: 'text', x: 0, y: 0, width: 100, height: 20, props: {}, styles: {} })
+      selectElement(id)
+      expect(useEditorStore.getState().selectedElementIds).toEqual([id])
+
+      setActivePage('p2')
+      expect(useEditorStore.getState().selectedElementIds).toEqual([])
+    })
+  })
+
+  describe('bulk and import operations', () => {
+    it('setElements does not save history without an active page', () => {
+      useEditorStore.getState().setElements([
+        { id: 'orphan', type: 'text', x: 0, y: 0, width: 100, height: 20, props: {}, styles: {} },
+      ])
+
+      expect(useEditorStore.getState().pages).toHaveLength(0)
+      expect(useEditorStore.getState().history).toHaveLength(0)
+    })
+
+    it('imports old single-page elements as one page', () => {
+      useEditorStore.getState().importState({
+        canvas: { width: 390, height: 844, zoom: 1, x: 0, y: 0 },
+        elements: [
+          { id: 'legacy-1', type: 'text', x: 1, y: 2, width: 100, height: 20, props: {}, styles: {} },
+        ],
+      })
+
+      const state = useEditorStore.getState()
+      expect(state.pages).toHaveLength(1)
+      expect(state.activePageId).toBe(state.pages[0].id)
+      expect(state.pages[0].elements[0].id).toBe('legacy-1')
+      expect(state.canvas.width).toBe(390)
+    })
+
+    it('imports pages over legacy elements and syncs canvas to active page', () => {
+      useEditorStore.getState().importState({
+        pages: [
+          { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+          { id: 'p2', name: 'Page 2', canvas: { width: 1024, height: 768 }, elements: [] },
+        ],
+        activePageId: 'p2',
+        canvas: { width: 375, height: 812, zoom: 1, x: 0, y: 0 },
+        elements: [
+          { id: 'ignored', type: 'text', x: 0, y: 0, width: 100, height: 20, props: {}, styles: {} },
+        ],
+      })
+
+      const state = useEditorStore.getState()
+      expect(state.pages).toHaveLength(2)
+      expect(state.pages.some(page => page.elements.some(element => element.id === 'ignored'))).toBe(false)
+      expect(state.activePageId).toBe('p2')
+      expect(state.canvas.width).toBe(1024)
+      expect(state.canvas.height).toBe(768)
+    })
   })
 })

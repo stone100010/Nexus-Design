@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
@@ -92,7 +93,27 @@ export async function POST(request: NextRequest) {
 
     if (id) {
       // 更新现有项目（不存在则创建）
-      try {
+      const existingProject = await prisma.project.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          ownerId: true,
+          members: {
+            where: { userId: user.id },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      })
+
+      if (existingProject && existingProject.ownerId !== user.id && existingProject.members.length === 0) {
+        return NextResponse.json(
+          { success: false, error: '无权修改该项目' },
+          { status: 403 }
+        )
+      }
+
+      if (existingProject) {
         project = await prisma.project.update({
           where: { id },
           data: {
@@ -108,22 +129,29 @@ export async function POST(request: NextRequest) {
             }
           }
         })
-      } catch {
+      } else {
         // 项目已被删除，降级为创建新项目
-        project = await prisma.project.create({
-          data: {
-            name: name || '未命名项目',
-            description: description || '',
-            data: data || {},
-            settings: settings || { theme: 'dark', devices: ['iphone-14-pro'] },
-            ownerId: user.id
-          },
-          include: {
-            owner: {
-              select: { id: true, name: true, email: true }
+        try {
+          project = await prisma.project.create({
+            data: {
+              name: name || '未命名项目',
+              description: description || '',
+              data: data || {},
+              settings: settings || { theme: 'dark', devices: ['iphone-14-pro'] },
+              ownerId: user.id
+            },
+            include: {
+              owner: {
+                select: { id: true, name: true, email: true }
+              }
             }
+          })
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+            throw new Error('项目创建失败，请重试')
           }
-        })
+          throw error
+        }
       }
     } else {
       // 创建新项目

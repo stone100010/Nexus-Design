@@ -15,10 +15,13 @@ import React, { useEffect,useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
+import { EditorElement } from '@/types'
 
 interface PropertiesPanelProps {
   className?: string
 }
+
+const EMPTY_ELEMENTS: EditorElement[] = []
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) => {
   const {
@@ -29,13 +32,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
     bringToFront,
     sendToBack,
     clearSelection,
-    getActivePage
   } = useEditorStore()
 
   const { showToast } = useUIStore()
   const [activeTab, setActiveTab] = useState<'style' | 'props' | 'layout'>('style')
 
-  const elements = getActivePage()?.elements ?? []
+  const elements = useEditorStore((state) =>
+    state.pages.find(page => page.id === state.activePageId)?.elements ?? EMPTY_ELEMENTS
+  )
   const selectedElement = elements.find(el => selectedElementIds.includes(el.id))
 
   // Form state

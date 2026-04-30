@@ -9,6 +9,8 @@ import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
 import { EditorElement } from '@/types'
 
+const EMPTY_ELEMENTS: EditorElement[] = []
+
 // Memoized element renderer
 const CanvasElement = React.memo<{
   element: EditorElement
@@ -57,6 +59,7 @@ const CanvasElement = React.memo<{
       )}
 
       {element.type === 'image' && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={String(element.props?.src || '')}
           alt={String(element.props?.alt || '')}
@@ -109,15 +112,18 @@ export const Canvas: React.FC<CanvasProps> = ({
     selectElement,
     clearSelection,
     setZoom,
-    getActivePage,
     pages,
     activePageId,
     setActivePage,
     addPage,
   } = useEditorStore()
 
-  const activePage = getActivePage()
-  const elements = activePage?.elements ?? []
+  const elements = useEditorStore(
+    useCallback(
+      (state) => state.pages.find(page => page.id === state.activePageId)?.elements ?? EMPTY_ELEMENTS,
+      []
+    )
+  )
 
   const { showToast } = useUIStore()
   const router = useRouter()
@@ -140,8 +146,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         y: (rect.height - canvas.height * canvas.zoom) / 2
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [canvas.width, canvas.height, canvas.zoom])
 
   // 添加新页面
   const handleAddPage = useCallback(() => {
@@ -222,7 +227,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     const y = (e.clientY - rect.top - canvasPosition.y) / canvas.zoom
 
     const newElement = {
-      id: `element-${Date.now()}`,
       type: 'button' as const,
       x,
       y,
@@ -237,11 +241,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
     }
 
-    addElement(newElement)
-    selectElement(newElement.id)
+    const elementId = addElement(newElement)
+    selectElement(elementId)
 
     if (onElementAdd) {
-      onElementAdd(newElement as unknown as EditorElement)
+      onElementAdd({ ...newElement, id: elementId } as EditorElement)
     }
 
     showToast('元素已添加', 'success')
