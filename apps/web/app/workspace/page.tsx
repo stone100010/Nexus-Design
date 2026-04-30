@@ -71,10 +71,21 @@ function WorkspaceContent() {
   const openProject = (project: Project) => {
     if (project.data && typeof project.data === 'object') {
       const data = project.data as Record<string, unknown>
-      importState({
-        elements: (data.elements as []) || [],
-        canvas: data.canvas as import('@/types').EditorState['canvas'],
-      })
+
+      // 支持多页格式和旧单页格式
+      if (data.pages && Array.isArray(data.pages)) {
+        importState({
+          pages: data.pages as import('@/types').DesignPage[],
+          activePageId: data.activePageId as string || '',
+          canvas: data.canvas as import('@/types').EditorState['canvas'],
+        })
+      } else {
+        importState({
+          elements: (data.elements as []) || [],
+          canvas: data.canvas as import('@/types').EditorState['canvas'],
+        })
+      }
+
       localStorage.setItem('currentProjectId', project.id)
     }
     router.push('/design/editor')
