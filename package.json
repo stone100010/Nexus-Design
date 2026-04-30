@@ -19,16 +19,20 @@
     "prepare": "husky install"
   },
   "devDependencies": {
-    "turbo": "^1.11.3",
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
     "husky": "^8.0.3",
     "lint-staged": "^15.2.0",
     "prettier": "^3.2.0",
-    "@commitlint/cli": "^18.4.3",
-    "@commitlint/config-conventional": "^18.4.3"
+    "tsx": "^4.21.0",
+    "turbo": "^1.11.3"
   },
   "engines": {
     "node": ">=18.18.0",
     "npm": ">=9.0.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  }
 }
