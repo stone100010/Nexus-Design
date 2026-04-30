@@ -6,11 +6,26 @@ import { handleApiError } from '@/lib/api-error'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
+function getAiConfig() {
+  return {
+    apiKey: process.env.NEXUS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    baseURL: process.env.NEXUS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://open.bigmodel.cn/api/coding/paas/v4',
+    model: process.env.NEXUS_OPENAI_MODEL || process.env.OPENAI_MODEL || 'glm-5.1',
+  }
+}
+
 function getOpenAI() {
+  const config = getAiConfig()
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_BASE_URL || 'https://apis.iflow.cn/v1'
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
   })
+}
+
+function estimateTokens(value: string | number) {
+  const length = typeof value === 'number' ? value : value.length
+  if (length <= 0) return 0
+  return Math.ceil(length / 3)
 }
 
 // 校验元素数组，过滤不合格的
@@ -41,6 +56,83 @@ function validatePage(page: Record<string, unknown>, index: number) {
     canvas: page.canvas || { width: 375, height: 812 },
     elements: validateElements(elements as Record<string, unknown>[]),
   }
+}
+
+function extractJsonPayload(content: string) {
+  let jsonStr = content.trim()
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim()
+
+  if (!jsonStr.startsWith('{')) {
+    const start = jsonStr.indexOf('{')
+    const end = jsonStr.lastIndexOf('}')
+    if (start !== -1 && end !== -1) {
+      jsonStr = jsonStr.substring(start, end + 1)
+    }
+  }
+
+  return jsonStr
+}
+
+function parseCompletePages(content: string) {
+  const pagesKeyMatch = /"pages"\s*:/.exec(content)
+  if (!pagesKeyMatch) {
+    return { pages: [] as Record<string, unknown>[], sawPagesKey: false }
+  }
+
+  const arrayStart = content.indexOf('[', pagesKeyMatch.index + pagesKeyMatch[0].length)
+  if (arrayStart === -1) {
+    return { pages: [] as Record<string, unknown>[], sawPagesKey: true }
+  }
+
+  const pages: Record<string, unknown>[] = []
+  let depth = 0
+  let pageStart = -1
+  let inString = false
+  let escapeNext = false
+
+  for (let i = arrayStart + 1; i < content.length; i++) {
+    const ch = content[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (inString) {
+      if (ch === '\\') escapeNext = true
+      else if (ch === '"') inString = false
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === '{') {
+      if (depth === 0) pageStart = i
+      depth++
+      continue
+    }
+
+    if (ch === '}') {
+      depth--
+      if (depth === 0 && pageStart !== -1) {
+        try {
+          pages.push(JSON.parse(content.slice(pageStart, i + 1)))
+        } catch {
+          // 当前 chunk 中对象仍不完整时，等待后续内容补齐。
+        }
+        pageStart = -1
+      }
+      continue
+    }
+
+    if (ch === ']' && depth === 0) break
+  }
+
+  return { pages, sawPagesKey: true }
 }
 
 // 系统提示词 - 多页 APP UI 设计（JSON 输出）
@@ -140,27 +232,81 @@ export async function POST(request: NextRequest) {
 
     // ========== 流式响应（增量分页，直接 HTTP 绕过 SDK） ==========
     if (wantStream) {
-      const aiUrl = `${process.env.OPENAI_BASE_URL || 'https://open.bigmodel.cn/api/coding/paas/v4'}/chat/completions`
-      const aiKey = process.env.OPENAI_API_KEY || ''
-      const aiModel = process.env.OPENAI_MODEL || 'glm-5.1'
+      const aiConfig = getAiConfig()
+      const aiUrl = `${aiConfig.baseURL}/chat/completions`
+      const aiKey = aiConfig.apiKey
+      const aiModel = aiConfig.model
+      const firstPageTimeoutMs = Number.parseInt(process.env.AI_FIRST_PAGE_TIMEOUT_MS || '90000', 10)
+      const streamTimeoutMs = Number.parseInt(process.env.AI_STREAM_TIMEOUT_MS || '300000', 10)
 
       const encoder = new TextEncoder()
-      let buffer = ''
+      let contentBuffer = ''
       let pageCount = 0
       const allPages: Record<string, unknown>[] = []
+      let loggedMissingPagesKey = false
+      let loggedReasoningContent = false
+      let reasoningChars = 0
+      let firstPageTokens: number | null = null
 
       const readable = new ReadableStream({
         async start(controller) {
           const startTime = Date.now()
+          let lastProgressAt = 0
+          const upstreamAbort = new AbortController()
+          let firstPageTimer: ReturnType<typeof setTimeout> | null = null
+          let streamTimer: ReturnType<typeof setTimeout> | null = null
+
+          const clearFirstPageTimer = () => {
+            if (firstPageTimer) {
+              clearTimeout(firstPageTimer)
+              firstPageTimer = null
+            }
+          }
+
+          const clearAllTimers = () => {
+            clearFirstPageTimer()
+            if (streamTimer) {
+              clearTimeout(streamTimer)
+              streamTimer = null
+            }
+          }
+
+          const buildProgress = (message: string, phase = 'streaming') => ({
+            type: 'progress',
+            phase,
+            message,
+            elapsed: Math.floor((Date.now() - startTime) / 1000),
+            chars: contentBuffer.length,
+            estimatedTokens: estimateTokens(contentBuffer),
+            reasoningChars,
+            reasoningEstimatedTokens: estimateTokens(reasoningChars),
+            pages: pageCount,
+            firstPageTokens,
+          })
+
+          const sendProgress = (message: string, phase = 'streaming') => {
+            lastProgressAt = Date.now()
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildProgress(message, phase))}\n\n`))
+          }
+
           const heartbeat = setInterval(() => {
             const elapsed = Math.floor((Date.now() - startTime) / 1000)
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'progress', message: `AI 正在生成中... ${elapsed}s` })}\n\n`))
-          }, 5000)
+            sendProgress(`AI 正在生成中... ${elapsed}s`)
+          }, 1000)
 
           try {
+            firstPageTimer = setTimeout(() => {
+              upstreamAbort.abort(new Error(`首屏生成超过 ${Math.round(firstPageTimeoutMs / 1000)} 秒，已停止本次请求。请缩短描述或稍后重试。`))
+            }, firstPageTimeoutMs)
+            streamTimer = setTimeout(() => {
+              upstreamAbort.abort(new Error(`AI 生成超过 ${Math.round(streamTimeoutMs / 1000)} 秒，已停止本次请求。`))
+            }, streamTimeoutMs)
+
+            sendProgress('已连接 AI，正在等待首个响应...', 'connecting')
             const response = await fetch(aiUrl, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${aiKey}`, 'Content-Type': 'application/json' },
+              signal: upstreamAbort.signal,
               body: JSON.stringify({
                 model: aiModel,
                 messages: [
@@ -199,106 +345,93 @@ export async function POST(request: NextRequest) {
 
                 try {
                   const chunk = JSON.parse(payload)
-                  const delta = chunk.choices?.[0]?.delta?.content || ''
+                  const deltaObj = chunk.choices?.[0]?.delta
+                  const reasoningDelta = deltaObj?.reasoning_content
+                  if (reasoningDelta) {
+                    reasoningChars += String(reasoningDelta).length
+                    if (!loggedReasoningContent) {
+                      loggedReasoningContent = true
+                      // eslint-disable-next-line no-console
+                      console.log('[AI] reasoning_content detected and counted')
+                    }
+                  }
+                  const delta = deltaObj?.content || ''
                   if (!delta) continue
-                  buffer += delta
+                  contentBuffer += delta
                 } catch { /* ignore parse errors */ }
               }
 
-              // 增量解析：从 buffer 中提取完整的 page 对象
-              // 查找 "pages" 数组的起始位置（兼容流式片段拼接）
-              const pagesKeyIdx = buffer.indexOf('"pages"')
-              if (pagesKeyIdx === -1 && buffer.length > 500) {
+              // 增量解析：保留完整 content，根据已发 page 数补发新完成页面。
+              const parsedPages = parseCompletePages(contentBuffer)
+              if (!parsedPages.sawPagesKey && contentBuffer.length > 500 && !loggedMissingPagesKey) {
+                loggedMissingPagesKey = true
                 // eslint-disable-next-line no-console
-                console.log(`[AI] buffer ${buffer.length} chars, no "pages" found. starts: ${JSON.stringify(buffer.slice(0, 80))}`)
+                console.log(`[AI] buffer ${contentBuffer.length} chars, no "pages" key found. starts: ${JSON.stringify(contentBuffer.slice(0, 120))}`)
               }
-              if (pagesKeyIdx !== -1) {
-                // 从 "pages" 之后找到 [ 的位置
-                const afterKey = buffer.indexOf('[', pagesKeyIdx)
-                if (afterKey !== -1) {
-                  let i = afterKey + 1
-                  let depth = 0
-                  let pageStart = -1
-                  let inString = false
-                  let escapeNext = false
 
-                  while (i < buffer.length) {
-                    const ch = buffer[i]
+              if (Date.now() - lastProgressAt > 500) {
+                const phase = pageCount === 0 ? 'first_page' : 'streaming'
+                const message = pageCount === 0
+                  ? '正在生成首屏页面...'
+                  : `已生成 ${pageCount} 个页面，继续接收后续页面...`
+                sendProgress(message, phase)
+              }
 
-                    if (escapeNext) {
-                      escapeNext = false
-                      i++
-                      continue
-                    }
-
-                    if (inString) {
-                      if (ch === '\\') escapeNext = true
-                      else if (ch === '"') inString = false
-                      i++
-                      continue
-                    }
-
-                    if (ch === '"') {
-                      inString = true
-                      i++
-                      continue
-                    }
-
-                    if (ch === '{') {
-                      if (depth === 0) pageStart = i
-                      depth++
-                    } else if (ch === '}') {
-                      depth--
-                      if (depth === 0 && pageStart !== -1) {
-                        const pageStr = buffer.substring(pageStart, i + 1)
-                        try {
-                          const pageObj = JSON.parse(pageStr)
-                          pageCount++
-                          const validatedPage = validatePage(pageObj, pageCount - 1)
-                          allPages.push(validatedPage as unknown as Record<string, unknown>)
-                          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'page', page: validatedPage, index: pageCount })}\n\n`))
-                        } catch { /* JSON 不完整，继续累积 */ }
-                        pageStart = -1
-                      }
-                    } else if (ch === ']') {
-                      // pages 数组结束
-                      break
-                    }
-
-                    i++
-                  }
-                  // 保留未解析完的部分（最后一个不完整 page）
-                  buffer = pageStart !== -1 ? buffer.substring(pageStart) : ''
+              while (pageCount < parsedPages.pages.length) {
+                const pageObj = parsedPages.pages[pageCount]
+                const validatedPage = validatePage(pageObj, pageCount)
+                pageCount++
+                allPages.push(validatedPage as unknown as Record<string, unknown>)
+                if (pageCount === 1 && firstPageTokens === null) {
+                  firstPageTokens = estimateTokens(contentBuffer)
+                  clearFirstPageTimer()
                 }
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                  type: 'page',
+                  page: validatedPage,
+                  index: pageCount,
+                  chars: contentBuffer.length,
+                  estimatedTokens: estimateTokens(contentBuffer),
+                  reasoningChars,
+                  reasoningEstimatedTokens: estimateTokens(reasoningChars),
+                  firstPageTokens,
+                })}\n\n`))
+                sendProgress(`第 ${pageCount} 个页面已返回: ${validatedPage.name}`, pageCount === 1 ? 'first_page_ready' : 'page_ready')
               }
             }
 
             clearInterval(heartbeat)
             // eslint-disable-next-line no-console
-            console.log(`[AI] stream done: ${pageCount} pages, buffer=${buffer.length} chars`)
+            console.log(`[AI] stream done: ${pageCount} pages, buffer=${contentBuffer.length} chars`)
             if (pageCount === 0) {
               // eslint-disable-next-line no-console
-              console.log(`[AI] buffer full: ${buffer}`)
+              console.log(`[AI] buffer full: ${contentBuffer}`)
             }
 
             // fallback：增量解析没拿到 page 时整体解析
-            if (pageCount === 0 && buffer.length > 0) {
+            if (pageCount === 0 && contentBuffer.length > 0) {
               try {
-                let jsonStr = buffer.trim()
-                const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-                if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim()
-                if (!jsonStr.startsWith('{')) {
-                  const start = jsonStr.indexOf('{')
-                  const end = jsonStr.lastIndexOf('}')
-                  if (start !== -1 && end !== -1) jsonStr = jsonStr.substring(start, end + 1)
-                }
+                const jsonStr = extractJsonPayload(contentBuffer)
                 const parsed = JSON.parse(jsonStr)
                 const pagesArr = parsed.pages || (parsed.elements ? [{ id: 'page-1', name: '页面 1', canvas: parsed.canvas || { width: 375, height: 812 }, elements: parsed.elements }] : [])
                 for (const pageData of pagesArr) {
                   pageCount++
-                  const validatedPage = validatePage(pageData, pageCount - 1)
+                  const validatedPage = validatePage(pageData as Record<string, unknown>, pageCount - 1)
                   allPages.push(validatedPage as unknown as Record<string, unknown>)
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'page', page: validatedPage, index: pageCount })}\n\n`))
+                  if (pageCount === 1 && firstPageTokens === null) {
+                    firstPageTokens = estimateTokens(contentBuffer)
+                    clearFirstPageTimer()
+                  }
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                    type: 'page',
+                    page: validatedPage,
+                    index: pageCount,
+                    chars: contentBuffer.length,
+                    estimatedTokens: estimateTokens(contentBuffer),
+                    reasoningChars,
+                    reasoningEstimatedTokens: estimateTokens(reasoningChars),
+                    firstPageTokens,
+                  })}\n\n`))
                 }
               } catch { /* fallback 也失败 */ }
             }
@@ -321,15 +454,32 @@ export async function POST(request: NextRequest) {
                   cost: 0,
                   status: 'SUCCESS'
                 }
-              }).catch(() => {})
+              }).catch((err) => {
+                console.error('[AI] failed to save generation:', err instanceof Error ? err.message : err)
+              })
             }
 
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', totalPages: pageCount, dailyRemaining: dailyLimit - todayCount - 1, dailyLimit })}\n\n`))
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'done',
+              totalPages: pageCount,
+              dailyRemaining: dailyLimit - todayCount - 1,
+              dailyLimit,
+              chars: contentBuffer.length,
+              estimatedTokens: estimateTokens(contentBuffer),
+              reasoningChars,
+              reasoningEstimatedTokens: estimateTokens(reasoningChars),
+              firstPageTokens,
+            })}\n\n`))
+            clearAllTimers()
             controller.close()
           } catch (err) {
             clearInterval(heartbeat)
-            console.error('[AI] stream error:', err instanceof Error ? err.message : err)
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : '生成失败' })}\n\n`))
+            clearAllTimers()
+            const errorMessage = upstreamAbort.signal.aborted && upstreamAbort.signal.reason instanceof Error
+              ? upstreamAbort.signal.reason.message
+              : err instanceof Error ? err.message : '生成失败'
+            console.error('[AI] stream error:', errorMessage)
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`))
             controller.close()
           }
         }
@@ -346,7 +496,7 @@ export async function POST(request: NextRequest) {
 
     // ========== 非流式响应（兼容旧逻辑） ==========
     const completion = await getOpenAI().chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'deepseek-v3.2',
+      model: getAiConfig().model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: prompt }
@@ -362,22 +512,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 提取 JSON（容错：AI 可能返回 markdown 包裹的 JSON）
-    let jsonStr = responseContent.trim()
-
-    // 去掉 ```json ... ``` 包裹
-    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1].trim()
-    }
-
-    // 如果开头不是 {，尝试找第一个 { 到最后一个 }
-    if (!jsonStr.startsWith('{')) {
-      const start = jsonStr.indexOf('{')
-      const end = jsonStr.lastIndexOf('}')
-      if (start !== -1 && end !== -1) {
-        jsonStr = jsonStr.substring(start, end + 1)
-      }
-    }
+    const jsonStr = extractJsonPayload(responseContent)
 
     let designData
     try {
@@ -423,7 +558,7 @@ export async function POST(request: NextRequest) {
         projectId: projectId || null,
         prompt,
         response: designData,
-        model: process.env.OPENAI_MODEL || 'deepseek-v3.2',
+        model: getAiConfig().model,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         design: designOutput as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -462,7 +597,7 @@ export async function POST(request: NextRequest) {
               projectId: null,
               prompt: '',
               response: {},
-              model: process.env.OPENAI_MODEL || 'deepseek-v3.2',
+              model: getAiConfig().model,
               tokensUsed: 0,
               cost: 0,
               status: 'FAILED',
