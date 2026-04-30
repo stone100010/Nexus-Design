@@ -1,6 +1,6 @@
 'use client'
 
-import { Maximize2, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Plus, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -103,14 +103,21 @@ export const Canvas: React.FC<CanvasProps> = ({
   onElementAdd
 }) => {
   const {
-    elements,
     selectedElementIds,
     canvas,
     addElement,
     selectElement,
     clearSelection,
-    setZoom
+    setZoom,
+    getActivePage,
+    pages,
+    activePageId,
+    setActivePage,
+    addPage,
   } = useEditorStore()
+
+  const activePage = getActivePage()
+  const elements = activePage?.elements ?? []
 
   const { showToast } = useUIStore()
   const router = useRouter()
@@ -135,6 +142,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 添加新页面
+  const handleAddPage = useCallback(() => {
+    const pageNum = pages.length + 1
+    const newPage = {
+      id: `page-${Date.now()}`,
+      name: `页面 ${pageNum}`,
+      canvas: { width: canvas.width, height: canvas.height },
+      elements: [],
+    }
+    addPage(newPage)
+    setActivePage(newPage.id)
+    showToast(`已添加 ${newPage.name}`, 'success')
+  }, [pages.length, canvas.width, canvas.height, addPage, setActivePage, showToast])
 
   // 右键拖拽平移画布
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
@@ -166,7 +187,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     if (isDraggingElement && selectedElementIds.length === 1) {
       const store = useEditorStore.getState()
-      const el = store.elements.find(el => el.id === selectedElementIds[0])
+      const el = store.getActivePage()?.elements.find(el => el.id === selectedElementIds[0])
       if (!el) return
 
       const newX = (e.clientX - dragStart.current.x) / canvas.zoom
@@ -359,8 +380,52 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* 页面标签栏 */}
+      {pages.length > 0 && (
+        <div className="absolute top-0 left-0 right-0 z-10 bg-gray-800/90 backdrop-blur border-b border-gray-700">
+          <div className="flex items-center h-9 px-2 overflow-x-auto scrollbar-hide">
+            {pages.map((page) => (
+              <button
+                key={page.id}
+                onClick={() => {
+                  setActivePage(page.id)
+                  // 切换页面时居中画布
+                  setTimeout(() => {
+                    if (containerRef.current) {
+                      const rect = containerRef.current.getBoundingClientRect()
+                      setCanvasPosition({
+                        x: (rect.width - page.canvas.width * canvas.zoom) / 2,
+                        y: (rect.height - page.canvas.height * canvas.zoom) / 2
+                      })
+                    }
+                  }, 0)
+                }}
+                className={cn(
+                  'flex-shrink-0 px-3 py-1 text-xs rounded-md transition-colors mr-1',
+                  page.id === activePageId
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                )}
+              >
+                {page.name}
+              </button>
+            ))}
+            <button
+              onClick={handleAddPage}
+              className="flex-shrink-0 p-1 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded transition-colors"
+              title="添加页面"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 工具栏 */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2">
+      <div className={cn(
+        'absolute left-1/2 -translate-x-1/2 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2',
+        pages.length > 0 ? 'top-11' : 'top-4'
+      )}>
         <button onClick={handleZoomOut} className="p-1.5 hover:bg-gray-700 rounded" title="缩小">
           <ZoomOut size={16} />
         </button>
@@ -377,7 +442,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       </div>
 
       {/* 状态栏 */}
-      <div className="absolute top-4 right-4 z-10 bg-gray-800/90 backdrop-blur rounded-lg px-3 py-2 text-xs text-gray-300">
+      <div className={cn(
+        'absolute right-4 z-10 bg-gray-800/90 backdrop-blur rounded-lg px-3 py-2 text-xs text-gray-300',
+        pages.length > 0 ? 'top-11' : 'top-4'
+      )}>
         <div className="flex items-center space-x-2">
           <div className={cn('w-2 h-2 rounded-full', isPanning ? 'bg-yellow-400' : 'bg-green-400')} />
           <span>{isPanning ? '平移中' : '就绪'}</span>
