@@ -161,7 +161,7 @@ npm run db:seed              # 种子数据
 | `DATABASE_URL` | PostgreSQL 连接字符串 | ✅ |
 | `NEXTAUTH_URL` | 应用 URL | ✅ |
 | `NEXTAUTH_SECRET` | NextAuth 密钥 | ✅ |
-| `OPENAI_API_KEY` | OpenAI API 密钥 | ❌ |
+| `NEXUS_OPENAI_API_KEY` | OpenAI API 密钥 | ❌ |
 | `REDIS_URL` | Redis 连接字符串 | ❌ |
 
 ## 🐛 常见问题

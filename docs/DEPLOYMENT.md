@@ -19,9 +19,9 @@ docker-compose up -d
 | `DATABASE_URL` | 是 | PostgreSQL 连接字符串 |
 | `NEXTAUTH_SECRET` | 是 | 会话加密密钥 |
 | `NEXTAUTH_URL` | 是 | 应用 URL |
-| `OPENAI_API_KEY` | 是 | OpenAI API 密钥 |
-| `OPENAI_BASE_URL` | 否 | 自定义 OpenAI 端点 |
-| `OPENAI_MODEL` | 否 | AI 模型名称 (默认: deepseek-v3.2) |
+| `NEXUS_OPENAI_API_KEY` | 是 | OpenAI API 密钥 |
+| `NEXUS_OPENAI_BASE_URL` | 否 | 自定义 OpenAI 端点 |
+| `NEXUS_OPENAI_MODEL` | 否 | AI 模型名称 (默认: deepseek-v3.2) |
 | `NEXUS_DEMO_PASSWORD` | 否 | 演示账号密码 |
 | `NEXUS_ADMIN_PASSWORD` | 否 | 管理员密码 |
 

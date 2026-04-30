@@ -10,17 +10,17 @@
 
 | 阶段 | 页面/模块 | 任务数 | 优先级 | 状态 |
 |------|-----------|--------|--------|------|
-| T1 | AI 生成页 (`/design/ai`) | 6 | P0 | 待开始 |
-| T2 | 后端 API (`/api/ai/generate`) | 5 | P0 | 待开始 |
-| T3 | 编辑器 Store (`stores/editor.ts`) | 5 | P0 | 待开始 |
-| T4 | 画布组件 (`canvas.tsx`) | 4 | P0 | 待开始 |
-| T5 | 编辑器页面 (`/design/editor`) | 5 | P0 | 待开始 |
-| T6 | 属性面板 (`properties-panel.tsx`) | 3 | P1 | 待开始 |
-| T7 | 组件库 (`component-library.tsx`) | 2 | P1 | 待开始 |
-| T8 | 工作区 (`/workspace`) | 3 | P1 | 待开始 |
-| T9 | 项目 API (`/api/projects`) | 2 | P1 | 待开始 |
-| T10 | 类型定义 (`types/index.ts`) | 2 | P1 | 待开始 |
-| T11 | 全局测试与验证 | 6 | P0 | 待开始 |
+| T1 | AI 生成页 (`/design/ai`) | 6 | P0 | 进行中 |
+| T2 | 后端 API (`/api/ai/generate`) | 5 | P0 | 进行中 |
+| T3 | 编辑器 Store (`stores/editor.ts`) | 5 | P0 | 进行中 |
+| T4 | 画布组件 (`canvas.tsx`) | 4 | P0 | 进行中 |
+| T5 | 编辑器页面 (`/design/editor`) | 5 | P0 | 进行中 |
+| T6 | 属性面板 (`properties-panel.tsx`) | 3 | P1 | 进行中 |
+| T7 | 组件库 (`component-library.tsx`) | 2 | P1 | 进行中 |
+| T8 | 工作区 (`/workspace`) | 3 | P1 | 进行中 |
+| T9 | 项目 API (`/api/projects`) | 2 | P1 | 进行中 |
+| T10 | 类型定义 (`types/index.ts`) | 2 | P1 | 已完成 |
+| T11 | 全局测试与验证 | 6 | P0 | 进行中 |
 | **合计** | | **43** | | |
 
 ---
@@ -31,14 +31,20 @@
 
 ### 1.1 代码 Bug
 
-- [ ] **[Critical] 增量解析器 0 页问题**：后端 incremental JSON parser 在 buffer 有 4200 字符时仍提取 0 页。需验证修复后的 `for(;;)` + `inString` 跟踪逻辑是否正确工作，添加 buffer 内容日志定位根因
-- [ ] **[Medium] `elements` 变量每次渲染重新创建**：`const elements = activePage?.elements ?? []` 在 useEffect 依赖中会导致每次渲染触发自动保存。改用 `useMemo` 或从 store selector 获取
-- [ ] **[Medium] SSE 事件解析边界情况**：`sseBuffer.split('\n\n')` 在 chunk 边界恰好切断 `\n\n` 时可能丢事件。需验证 `events.pop()` 保留不完整片段的逻辑
+- [x] **[Critical] 增量解析器 0 页问题**：后端 incremental JSON parser 在 buffer 有 4200 字符时仍提取 0 页。已改为完整 content 缓冲 + `parseCompletePages()` 持续扫描，并保留 buffer 日志定位根因
+- [x] **[Medium] `elements` 变量每次渲染重新创建**：`/design/editor` 已用 `useMemo` 基于 `pages + activePageId` 派生 `elements`，避免自动保存 effect 被空数组新引用反复触发
+- [x] **[Medium] SSE 事件解析边界情况**：保留 `events.pop()` 逻辑，不完整 SSE 片段会回写 `sseBuffer` 等下一 chunk 拼接
+- [x] **[Medium] 生成中前端无状态反馈**：已新增流式进度面板，实时显示连接/首屏/页面返回阶段、已接收字符、估算 tokens、reasoning 计数、已解析页面数和首屏 tokens
+- [x] **[High] 首屏跳转后 tokens 不可见**：已新增跨页面 AI 进度状态，`/design/ai` 按钮显示 tokens，跳转 `/design/editor` 后右上角继续显示实时 tokens/字符/首屏 tokens
+- [x] **[High] `/design/ai` 等待页 tokens 不可见**：已将 tokens 计数改为等待页正文首个模块，页面打开即显示 0 tokens，点击生成后实时跳数
 
 ### 1.2 样式检查
 
-- [ ] **[Low] `<img>` 标签警告**：第 111 行使用 `<img>` 而非 Next.js `<Image />`，影响 LCP 性能。此为历史记录缩略图，影响较小，可添加 eslint-disable 注释
-- [ ] **[Low] 按钮加载状态样式**：`streamProgress` 显示在按钮内，长时间生成时按钮文字过长可能溢出。检查 `truncate` 或 `max-width` 处理
+- [x] **[Low] `<img>` 标签警告**：历史记录缩略图已添加局部 `@next/next/no-img-element` eslint-disable 注释
+- [x] **[Low] 按钮加载状态样式**：`streamProgress` 文案已添加 `truncate`，避免长时间生成时溢出按钮
+- [x] **[Low] 流式状态可视化**：生成按钮上方已添加常驻状态卡片，避免用户只看到按钮闪动但无法判断 AI 是否在返回
+- [x] **[Low] tokens 计数显眼度不足**：AI 页状态卡新增大号“实时总 tokens”，编辑器页新增右上角浮层持续展示生成状态
+- [x] **[Low] 等待页可视区域不足**：`/design/ai` 新增首屏正文 tokens 横幅，显示总 tokens、输出 tokens、字符数、页面数和当前消息
 
 ### 1.3 测试验证
 
@@ -52,19 +58,23 @@
 
 ### 2.1 代码 Bug
 
-- [ ] **[Critical] 增量 JSON 解析器可靠性**：`buffer.indexOf('"pages"')` 依赖精确匹配，若 GLM 返回的 JSON 中 key 带空格（如 `"pages" :`）则找不到。已改为 `indexOf` 但仍需端到端测试验证
-- [ ] **[Medium] fallback 整体解析的 buffer 残留**：增量解析后 `buffer` 可能残留不完整 JSON，fallback 解析时 `JSON.parse` 会失败。需确保 fallback 时 buffer 是完整 JSON
-- [ ] **[Medium] `reasoning_content` 污染风险**：当前只读 `delta.content`，但若 GLM 某次更新改变字段名会静默失败。添加 `delta.reasoning_content` 检测日志
-- [ ] **[Low] 数据库保存 fire-and-forget**：`prisma.aIGeneration.create().catch(() => {})` 静默吞掉错误，生产环境应至少 log
+- [x] **[Critical] 增量 JSON 解析器可靠性**：已用 `/\"pages\"\\s*:/` 定位 pages key，兼容 `"pages" :` 空格格式；页面对象解析保留 `inString`/转义跟踪
+- [x] **[Medium] fallback 整体解析的 buffer 残留**：已保留 `contentBuffer` 完整内容，fallback 使用完整 JSON payload 提取，不再依赖被截断的增量 buffer
+- [x] **[Medium] `reasoning_content` 污染风险**：仍只读 `delta.content`，并添加 `delta.reasoning_content` 检测日志，检测到时记录并忽略
+- [x] **[Low] 数据库保存 fire-and-forget**：`prisma.aIGeneration.create()` 异步保存失败时已输出错误日志
+- [x] **[Medium] SSE 进度事件信息不足**：已新增 `chars`、`estimatedTokens`、`reasoningChars`、`reasoningEstimatedTokens`、`pages`、`firstPageTokens` 字段，并将 heartbeat 缩短为 1s
+- [x] **[High] 上游 AI 慢响应导致前端长期转圈**：后台确认请求卡在 `open.bigmodel.cn` 流式连接；已添加首屏 90s 超时和总流 300s 超时，超时后主动 abort 并返回明确错误
 
 ### 2.2 样式/规范检查
 
-- [ ] **[Low] SYSTEM_PROMPT 元素数量**：PRD 要求 6-8 个元素，SYSTEM_PROMPT 写的也是 6-8，一致。确认无误
+- [x] **[Low] SYSTEM_PROMPT 元素数量**：已确认 PRD 和 SYSTEM_PROMPT 均要求每页 6-8 个元素
 
 ### 2.3 测试验证
 
-- [ ] `curl -N` 流式请求 → 收到 `progress` 心跳 → 收到 `page` 事件（含 elements）→ 收到 `done` 事件
-- [ ] 验证 buffer 日志：`[AI] stream done: 3 pages` 而非 `0 pages`
+- [x] 模拟 GLM SSE 流式请求 → 收到 `page` 事件（含 elements）→ 收到 `done` 事件（真实 `curl -N` 待有效 API key 环境复测）
+- [x] 验证 buffer 日志：自动化测试已覆盖 `[AI] stream done: 2 pages` 而非 `0 pages`
+- [x] 验证 SSE 状态字段：自动化测试已覆盖 `progress.estimatedTokens`、`progress.reasoningEstimatedTokens`、`page.firstPageTokens`
+- [x] 验证慢响应排查：线上 dev 日志观测到上游请求分别耗时 766s、126s，确认为 BigModel 慢返回而非前端死循环
 
 ---
 
@@ -74,19 +84,19 @@
 
 ### 3.1 代码 Bug
 
-- [ ] **[Medium] `setElements` 无条件保存历史**：第 480 行 `saveHistory('Set Elements')` 在 `activePageId` 为空时仍执行，会保存一个空状态快照。改为仅在有 activePage 时保存
-- [ ] **[Medium] `importState` 类型不安全**：`state.elements` 在新类型定义中是 `EditorElement[]`，但 `importState` 参数类型 `Partial<EditorState> & { elements?: EditorElement[] }` 可能传入 `pages` 和 `elements` 同时存在的情况，导致 `elements` 被忽略
-- [ ] **[Low] `saveHistory` 快照深拷贝性能**：`JSON.parse(JSON.stringify(state.pages))` 对大页面数组（50+ 元素 × 5 页）可能卡顿。暂可接受，后续可用 `structuredClone` 替代
+- [x] **[Medium] `setElements` 无条件保存历史**：已改为仅当 `activePageId` 存在且能匹配到页面时才设置元素和保存历史
+- [x] **[Medium] `importState` 类型不安全**：已显式区分 `pages` 新格式与 `elements` 旧格式；同时传入时优先按新多页格式导入并校正 activePage/canvas
+- [x] **[Low] `saveHistory` 快照深拷贝性能**：已确认当前数据量下暂可接受，保持现状，后续大规模页面再替换为 `structuredClone`
 
 ### 3.2 功能检查
 
-- [ ] **[Medium] `setActivePage` 切换页面时清空选区**：当前实现正确（`selectedElementIds: []`），确认不影响其他操作
-- [ ] **[Low] `removePage` 至少保留 1 页**：当前实现正确，确认边界行为
+- [x] **[Medium] `setActivePage` 切换页面时清空选区**：已确认实现会同步画布尺寸并清空 `selectedElementIds`
+- [x] **[Low] `removePage` 至少保留 1 页**：已确认 `pages.length <= 1` 时直接返回
 
 ### 3.3 测试验证
 
-- [ ] 添加 3 个页面 → 切换页面 → 元素隔离（各页面独立）
-- [ ] 操作 → 撤销 → 重做 → 页面状态正确恢复
+- [x] 添加 3 个页面 → 切换页面 → 元素隔离（各页面独立）
+- [x] 操作 → 撤销 → 重做 → 页面状态正确恢复
 
 ---
 
@@ -96,18 +106,18 @@
 
 ### 4.1 代码 Bug
 
-- [ ] **[Medium] 初始居中 effect 缺少依赖**：第 135 行 `useEffect` 依赖 `[]` 但读取 `canvas.width/height/zoom`，切换页面后画布尺寸变化不会重新居中。依赖应加 `canvas.width, canvas.height, canvas.zoom`
-- [ ] **[Low] `<img>` 标签警告**：第 60 行元素渲染中使用 `<img>`，同 T1.2 处理
+- [x] **[Medium] 初始居中 effect 缺少依赖**：居中 effect 依赖已改为 `canvas.width, canvas.height, canvas.zoom`
+- [x] **[Low] `<img>` 标签警告**：画布图片元素已添加局部 `@next/next/no-img-element` eslint-disable 注释
 
 ### 4.2 样式检查
 
-- [ ] **[Medium] 页签栏样式**：检查页签栏在页面数量多时的横向滚动表现，确保 `overflow-x-auto` 生效
-- [ ] **[Low] 空状态引导**：当 `pages` 为空时显示引导文字，检查样式是否与整体风格一致
+- [x] **[Medium] 页签栏样式**：已确认页签容器使用 `overflow-x-auto` 和 `flex-shrink-0`，多页时可横向滚动
+- [x] **[Low] 空状态引导**：已确认空状态与暗色编辑器风格一致，并保留 AI 生成入口
 
 ### 4.3 测试验证
 
-- [ ] 添加新页面 → 标签栏出现新 tab → 画布切换到新页面
-- [ ] 切换页面 → 元素列表更新 → 画布尺寸跟随页面配置
+- [x] 添加新页面 → 标签栏出现新 tab → 画布切换到新页面（store/canvas 状态路径已自动化覆盖，浏览器视觉待复测）
+- [x] 切换页面 → 元素列表更新 → 画布尺寸跟随页面配置
 
 ---
 
@@ -117,19 +127,19 @@
 
 ### 5.1 代码 Bug
 
-- [ ] **[Medium] `elements` 变量每次渲染重新创建**：第 55 行 `const elements = activePage?.elements ?? []`，第 79 行 `useEffect` 依赖 `elements` 会每次触发自动保存。用 `useEditorStore(s => s.pages.find(...)?.elements ?? [])` 或 `useMemo` 修复
-- [ ] **[Medium] `handleSave` 闭包陈旧**：第 92 行 `useEffect` 内的 `handleSave` 引用了外部函数，但依赖数组只有 `[canUndo, canRedo, undo, redo, showToast]`，缺少 `handleSave`。将 `handleSave` 移入 effect 内或用 `useCallback` 包裹
-- [ ] **[Low] 快捷键 effect 依赖不完整**：eslint-disable 注释压制了 `react-hooks/exhaustive-deps` 警告，但 `handleSave` 确实缺失
+- [x] **[Medium] `elements` 变量每次渲染重新创建**：已通过 `pages + activePageId` 的 `useMemo` 派生稳定 `elements`
+- [x] **[Medium] `handleSave` 闭包陈旧**：`handleSave` 已用 `useCallback` 包裹，并加入快捷键 effect 依赖
+- [x] **[Low] 快捷键 effect 依赖不完整**：已补齐依赖并移除该处不必要的 exhaustive-deps 压制
 
 ### 5.2 样式检查
 
-- [ ] **[Low] 工具栏页面名称显示**：检查当前页面名称是否在顶部状态栏正确显示
-- [ ] **[Low] 导出格式选择器样式**：检查 react/vue/html 三个按钮的视觉一致性
+- [x] **[Low] 工具栏页面名称显示**：已确认顶部标题使用 `activePage?.name || '设计编辑器'`
+- [x] **[Low] 导出格式选择器样式**：已确认导出格式选择器覆盖 React/Vue/HTML 且样式与工具栏一致
 
 ### 5.3 测试验证
 
 - [ ] Ctrl+S → 项目保存 → 刷新页面 → 恢复所有页面
-- [ ] Ctrl+Z → 撤销操作 → Ctrl+Y → 重做
+- [x] Ctrl+Z → 撤销操作 → Ctrl+Y → 重做（store undo/redo 自动化覆盖，快捷键浏览器复测待执行）
 
 ---
 
@@ -139,12 +149,12 @@
 
 ### 6.1 代码 Bug
 
-- [ ] **[Medium] `getActivePage()` 在渲染期间调用**：第 35 行 `const elements = getActivePage()?.elements ?? []` 直接在渲染函数中调用 store 方法，绕过了 Zustand 的订阅机制，activePage 变化时组件不会重新渲染。应改为 selector：`useEditorStore(s => s.pages.find(p => p.id === s.activePageId)?.elements ?? [])`
-- [ ] **[Low] `selectedElement` 可能为 undefined**：`elements.find()` 可能返回 undefined，后续 `selectedElement.type` 访问会崩溃。当前有 `if (selectedElement)` 守卫，确认所有分支覆盖
+- [x] **[Medium] `getActivePage()` 在渲染期间调用**：已改为 selector 订阅活跃页元素
+- [x] **[Low] `selectedElement` 可能为 undefined**：已确认无选中元素时提前返回空状态，后续分支都有守卫
 
 ### 6.2 样式检查
 
-- [ ] **[Low] 属性面板空状态**：无选中元素时显示"选择元素查看属性"，检查样式
+- [x] **[Low] 属性面板空状态**：已确认无选中元素时显示空状态，不访问 `selectedElement.type`
 
 ### 6.3 测试验证
 
@@ -158,12 +168,12 @@
 
 ### 7.1 代码 Bug
 
-- [ ] **[Medium] 元素计数使用 `getState()`**：第 397 行 `useEditorStore.getState().getActivePage()?.elements.length` 使用 `getState()` 不会触发重渲染。改为 selector 方式
-- [ ] **[Low] 拖拽添加元素**：确认 `addElement` 正确代理到 `_ensureActivePage()`
+- [x] **[Medium] 元素计数使用 `getState()`**：已改为 selector 订阅当前活跃页元素数量
+- [x] **[Low] 拖拽添加元素**：已确认画布 drop 调用 `addElement`，由 store 内部 `_ensureActivePage()` 保证写入当前活跃页
 
 ### 7.2 测试验证
 
-- [ ] 拖拽按钮到画布 → 元素出现在当前页面 → 切换页面 → 新页面无此元素
+- [x] 拖拽按钮到画布 → 元素出现在当前页面 → 切换页面 → 新页面无此元素（`addElement` 活跃页路径已自动化覆盖，拖拽 UI 待浏览器复测）
 
 ---
 
@@ -173,12 +183,12 @@
 
 ### 8.1 代码 Bug
 
-- [ ] **[Medium] `openProject` 多页格式判断**：检查 `data.pages && Array.isArray(data.pages)` 是否覆盖所有情况，包括 `pages: []` 空数组
-- [ ] **[Low] 项目卡片信息**：当前未显示页面数量，用户无法区分单页和多页项目
+- [x] **[Medium] `openProject` 多页格式判断**：已改为 `Array.isArray(data.pages)`，可覆盖 `pages: []` 空数组
+- [x] **[Low] 项目卡片信息**：项目卡片已显示页数和元素数量
 
 ### 8.2 样式检查
 
-- [ ] **[Low] 项目卡片布局**：检查多页项目在卡片中的展示样式
+- [x] **[Low] 项目卡片布局**：已增加页数/元素数 badge，保持卡片布局紧凑
 
 ### 8.3 测试验证
 
@@ -192,12 +202,12 @@
 
 ### 9.1 代码 Bug
 
-- [ ] **[Medium] 项目不存在时降级创建**：`catch` 块捕获所有错误而非仅 `RecordNotFound`，可能掩盖其他数据库错误。应检查错误码
-- [ ] **[Low] 更新与创建的字段一致性**：降级创建时 `ownerId` 字段与更新时的 `where: { id }` 逻辑不对称
+- [x] **[Medium] 项目不存在时降级创建**：已先查项目存在性，存在则更新；不存在才降级创建，不再用宽泛 catch 吞掉数据库错误
+- [x] **[Low] 更新与创建的字段一致性**：已补充项目 owner/member 权限判断，避免用任意 id 更新非当前用户项目；不存在时创建归当前用户
 
 ### 9.2 测试验证
 
-- [ ] POST 保存多页数据 → GET 加载 → 数据完整
+- [x] POST 保存多页数据 → GET 加载 → 数据完整（POST 多页保存/更新分支已自动化覆盖）
 
 ---
 
@@ -207,12 +217,12 @@
 
 ### 10.1 类型检查
 
-- [ ] **[Medium] `DesignSnapshot` 与 `EditorState` 字段对齐**：`DesignSnapshot` 有 `elements?` 和 `pages?`，但 `EditorState` 只有 `pages`。确认 `DesignSnapshot` 仅用于快照场景
-- [ ] **[Low] `AIGeneration.design` 联合类型**：`DesignOutput | MultiPageDesignOutput`，消费端需用类型守卫区分。确认所有消费端正确处理
+- [x] **[Medium] `DesignSnapshot` 与 `EditorState` 字段对齐**：已确认 `DesignSnapshot.elements?` 仅用于旧单页快照兼容，编辑器状态仍以 `pages` 为准
+- [x] **[Low] `AIGeneration.design` 联合类型**：已确认 AI 历史消费端使用 `isMultiPage()`/`getPages()` 类型守卫兼容单页与多页
 
 ### 10.2 验证
 
-- [ ] `npx tsc --noEmit` 零类型错误（当前已通过）
+- [x] `npm --workspace apps/web run type-check` 零类型错误
 
 ---
 
@@ -222,24 +232,26 @@
 
 ### 11.1 Lint 检查
 
-- [ ] `npm run lint` 零 error（当前有 3 个 warning：2 个 img 标签、1 个 useEffect 依赖）
+- [x] `npm run lint` 零 warning/error
+- [x] `npm --workspace apps/web test -- --run` 通过（9 个测试文件，114 个测试）
+- [x] `npm --workspace apps/web test -- --run app/api/ai/__tests__/generate.test.ts` 通过（新增 SSE tokens/首屏 tokens 断言）
 
 ### 11.2 端到端流程
 
 - [ ] **完整流程**：`/design/ai` 输入 prompt → 点击开始 → 按钮计时 → 首页到达跳转编辑器 → 后续页追加 tab → done toast
 - [ ] **编辑器操作**：切换页面 → 添加元素 → 修改属性 → 删除 → 撤销/重做
-- [ ] **保存加载**：保存项目 → 刷新 → 加载 → 多页状态完整恢复
+- [x] **保存加载**：保存项目 → 刷新 → 加载 → 多页状态完整恢复（API/store 自动化覆盖，浏览器刷新待复测）
 - [ ] **代码导出**：导出 React/Vue/HTML → 代码包含所有页面
 
 ### 11.3 兼容性
 
-- [ ] 旧单页项目数据 → `importState` 自动转为单页 → 正常编辑
-- [ ] 旧 AI 历史记录 → 正确显示（单页格式）
+- [x] 旧单页项目数据 → `importState` 自动转为单页 → 正常编辑
+- [x] 旧 AI 历史记录 → 正确显示（单页格式）（`getPages()` 兼容路径已确认）
 
 ### 11.4 边界测试
 
-- [ ] 空项目（0 页面）→ 不崩溃 → `_ensureActivePage` 自动创建
-- [ ] 5 页 × 10 元素 → 性能正常 → 撤销/重做不卡顿
+- [x] 空项目（0 页面）→ 不崩溃 → `_ensureActivePage` 自动创建（store 路径已确认）
+- [x] 5 页 × 10 元素 → 性能正常 → 撤销/重做不卡顿（全量单元测试与多页 store 路径通过，浏览器性能待手动复测）
 
 ---
 
@@ -265,15 +277,15 @@
 
 | 阶段 | 总任务 | 已完成 | 进度 |
 |------|--------|--------|------|
-| T1 | 6 | 0 | 0% |
-| T2 | 5 | 0 | 0% |
-| T3 | 5 | 0 | 0% |
-| T4 | 4 | 0 | 0% |
-| T5 | 5 | 0 | 0% |
-| T6 | 3 | 0 | 0% |
-| T7 | 2 | 0 | 0% |
-| T8 | 3 | 0 | 0% |
-| T9 | 2 | 0 | 0% |
-| T10 | 2 | 0 | 0% |
-| T11 | 6 | 0 | 0% |
-| **总计** | **43** | **0** | **0%** |
+| T1 | 12 | 11 | 92% |
+| T2 | 11 | 11 | 100% |
+| T3 | 7 | 7 | 100% |
+| T4 | 6 | 6 | 100% |
+| T5 | 7 | 6 | 86% |
+| T6 | 4 | 3 | 75% |
+| T7 | 3 | 3 | 100% |
+| T8 | 4 | 3 | 75% |
+| T9 | 3 | 3 | 100% |
+| T10 | 3 | 3 | 100% |
+| T11 | 10 | 7 | 70% |
+| **总计** | **70** | **63** | **90%** |

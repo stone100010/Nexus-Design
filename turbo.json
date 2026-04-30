@@ -2,8 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "pipeline": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
     },
     "dev": {
       "cache": false,
@@ -11,7 +17,9 @@
     },
     "lint": {},
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "outputs": []
     },
     "type-check": {},
@@ -27,7 +35,9 @@
     "DATABASE_URL",
     "NEXTAUTH_URL",
     "NEXTAUTH_SECRET",
-    "OPENAI_API_KEY",
-    "REDIS_URL"
+    "NEXUS_OPENAI_API_KEY",
+    "REDIS_URL",
+    "NEXUS_OPENAI_BASE_URL",
+    "NEXUS_OPENAI_MODEL"
   ]
 }

@@ -16,9 +16,9 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="openssl rand -base64 32 生成的随机字符串"
 
 # OpenAI (可选，用于AI功能)
-OPENAI_API_KEY="sk-..."
-OPENAI_BASE_URL="https://api.openai.com/v1"
-OPENAI_MODEL="gpt-4-turbo-preview"
+NEXUS_OPENAI_API_KEY="sk-..."
+NEXUS_OPENAI_BASE_URL="https://api.openai.com/v1"
+NEXUS_OPENAI_MODEL="gpt-4-turbo-preview"
 
 # 演示账号（仅开发环境，生产环境应禁用）
 NEXUS_DEMO_PASSWORD="安全的随机密码"
@@ -85,7 +85,7 @@ NODE_ENV=production
 DATABASE_URL="postgresql://..."
 NEXTAUTH_URL="https://yourapp.com"
 NEXTAUTH_SECRET="强随机字符串"
-OPENAI_API_KEY="sk-..."  # 如需AI功能
+NEXUS_OPENAI_API_KEY="sk-..."  # 如需AI功能
 ```
 
 **安全配置：**

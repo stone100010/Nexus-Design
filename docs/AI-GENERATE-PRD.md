@@ -59,9 +59,9 @@ Body: { prompt: string, canvasSize?: object, style?: string, stream?: boolean }
 
 | 配置项 | 值 | 来源 |
 |--------|-----|------|
-| 模型 | glm-5.1 | OPENAI_MODEL |
-| API 地址 | https://open.bigmodel.cn/api/coding/paas/v4 | OPENAI_BASE_URL |
-| API Key | (env) | OPENAI_API_KEY |
+| 模型 | glm-5.1 | NEXUS_OPENAI_MODEL |
+| API 地址 | https://open.bigmodel.cn/api/coding/paas/v4 | NEXUS_OPENAI_BASE_URL |
+| API Key | (env) | NEXUS_OPENAI_API_KEY |
 | 最大 token | 16000 | 硬编码 |
 
 **重要：GLM 模型流式响应中，最终答案在 `content` 字段，思考过程在 `reasoning_content` 字段。只读 `content`，忽略 `reasoning_content`。**
