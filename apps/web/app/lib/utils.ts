@@ -111,20 +111,23 @@ export function throttle<T extends (...args: any[]) => any>(
 /**
  * 深度合并对象
  */
-export function deepMerge<T extends Record<string, any>>(
+export function deepMerge<T extends Record<string, unknown>>(
   target: T,
   source: Partial<T>
 ): T {
-  const output = { ...target } as any
-  
+  const output = { ...target } as Record<string, unknown>
+
   for (const key in source) {
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      output[key] = deepMerge(target[key] || {}, source[key] as any)
+      output[key] = deepMerge(
+        (target[key] || {}) as Record<string, unknown>,
+        source[key] as Record<string, unknown>
+      )
     } else {
       output[key] = source[key]
     }
   }
-  
+
   return output as T
 }
 

@@ -1,3 +1,91 @@
+// ==================== 核心数据类型 ====================
+
+export interface CanvasData {
+  canvas: { width: number; height: number; zoom: number }
+  elements: EditorElement[]
+}
+
+export interface DesignSnapshot {
+  canvas: { width: number; height: number; zoom: number }
+  elements: EditorElement[]
+  timestamp?: string
+}
+
+export interface ChangeRecord {
+  type: 'add' | 'update' | 'delete' | 'move' | 'resize'
+  elementId: string
+  before?: Partial<EditorElement>
+  after?: Partial<EditorElement>
+  timestamp: string
+}
+
+export interface ComponentPropsData {
+  text?: string
+  placeholder?: string
+  src?: string
+  variant?: string
+  size?: string
+  disabled?: boolean
+  [key: string]: unknown
+}
+
+export interface ComponentStylesData {
+  background?: string
+  color?: string
+  fontSize?: string
+  borderRadius?: string
+  padding?: string
+  margin?: string
+  [key: string]: string | undefined
+}
+
+export interface ComponentEventsData {
+  onClick?: string
+  onChange?: string
+  onSubmit?: string
+  [key: string]: string | undefined
+}
+
+export interface AIResponseData {
+  choices?: Array<{ message?: { content?: string } }>
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  [key: string]: unknown
+}
+
+export interface DesignOutput {
+  canvas: { width: number; height: number }
+  elements: Array<{
+    type: string
+    x: number
+    y: number
+    width: number
+    height: number
+    props?: Record<string, unknown>
+    styles?: Record<string, string>
+  }>
+}
+
+export interface CodeOutput {
+  framework: string
+  code: string
+  imports?: string[]
+}
+
+export interface WebSocketPayload {
+  type: string
+  data: unknown
+  userId?: string
+  timestamp?: string
+}
+
+export interface TemplateData {
+  canvas: { width: number; height: number }
+  elements: EditorElement[]
+  metadata?: Record<string, unknown>
+}
+
+// ==================== 用户类型 ====================
+
 // 用户类型
 export interface User {
   id: string
@@ -18,7 +106,7 @@ export interface Project {
   ownerId: string
   teamId?: string
   thumbnail?: string
-  data?: any
+  data?: CanvasData
   settings: ProjectSettings
   isPublic: boolean
   createdAt: Date
@@ -72,11 +160,11 @@ export interface Version {
   projectId: string
   version: number
   name?: string
-  data: any
+  data: DesignSnapshot
   createdBy: string
   creator?: User
   message?: string
-  changes?: any
+  changes?: ChangeRecord[]
   thumbnail?: string
   createdAt: Date
 }
@@ -87,9 +175,9 @@ export interface Component {
   name: string
   type: string
   teamId?: string
-  props: any
-  styles: any
-  events?: any
+  props: ComponentPropsData
+  styles: ComponentStylesData
+  events?: ComponentEventsData
   category?: string
   tags: string[]
   version: number
@@ -106,10 +194,10 @@ export interface AIGeneration {
   userId: string
   projectId?: string
   prompt: string
-  response: any
+  response: AIResponseData
   model: string
-  design?: any
-  code?: any
+  design?: DesignOutput
+  code?: CodeOutput
   tokensUsed: number
   cost: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
@@ -175,7 +263,7 @@ export interface File {
 }
 
 // API 响应类型
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -223,8 +311,8 @@ export interface EditorElement {
   y: number
   width: number
   height: number
-  props: any
-  styles: any
+  props: Record<string, unknown>
+  styles: Record<string, string | number>
   children?: EditorElement[]
 }
 
@@ -274,7 +362,7 @@ export const DEVICES: Device[] = [
 export interface AIGenerationState {
   status: 'idle' | 'loading' | 'success' | 'error'
   progress: number
-  result?: any
+  result?: DesignOutput
   error?: string
 }
 
@@ -331,7 +419,7 @@ export interface ErrorResponse {
 // WebSocket 事件类型
 export interface WebSocketEvent {
   type: string
-  payload: any
+  payload: WebSocketPayload
   timestamp: Date
   userId?: string
   projectId?: string
@@ -357,19 +445,19 @@ export interface CanvasConfig {
 
 // 组件属性
 export interface ComponentProps {
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 样式属性
 export interface StyleProps {
-  [key: string]: any
+  [key: string]: string | undefined
 }
 
 // 事件处理器
 export interface EventHandler {
   event: string
   action: string
-  params?: any
+  params?: Record<string, unknown>
 }
 
 // 模板类型
@@ -378,7 +466,7 @@ export interface Template {
   name: string
   description: string
   thumbnail: string
-  data: any
+  data: TemplateData
   tags: string[]
   category: string
   isPublic: boolean

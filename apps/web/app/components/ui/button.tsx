@@ -39,10 +39,24 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, loading, disabled, children, ...props }, ref) => {
-    const Comp = asChild ? React.Fragment : 'button'
+    const classes = cn(buttonVariants({ variant, size, className }), loading && 'opacity-70 cursor-wait')
+
+    if (asChild) {
+      return (
+        <span className={classes} {...(props as React.HTMLAttributes<HTMLSpanElement>)}>
+          {loading ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+              {children}
+            </span>
+          ) : children}
+        </span>
+      )
+    }
+
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }), loading && 'opacity-70 cursor-wait')}
+      <button
+        className={classes}
         ref={ref}
         disabled={disabled || loading}
         {...props}
@@ -53,7 +67,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             {children}
           </span>
         ) : children}
-      </Comp>
+      </button>
     )
   }
 )
