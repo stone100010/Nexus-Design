@@ -9,90 +9,128 @@ import { Navbar } from '@/components/shared/navbar'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
-import { DesignOutput } from '@/types'
+import { DesignOutput, DesignPage, MultiPageDesignOutput } from '@/types'
+
+type DesignData = DesignOutput | MultiPageDesignOutput
 
 interface AIHistory {
   id: string
   prompt: string
-  response: DesignOutput
+  response: DesignData
   createdAt: string
   tokensUsed: number
   cost: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
 }
 
-// 缩略图预览组件
-function DesignThumbnail({ design }: { design: DesignOutput }) {
-  if (!design?.elements?.length || !design?.canvas) return null
+// 判断是否为多页格式
+function isMultiPage(data: DesignData): data is MultiPageDesignOutput {
+  return 'pages' in data && Array.isArray(data.pages)
+}
 
-  const canvasW = design.canvas.width || 375
-  const canvasH = design.canvas.height || 812
+// 获取页面列表
+function getPages(data: DesignData): DesignPage[] {
+  if (isMultiPage(data)) {
+    return data.pages
+  }
+  // 旧单页格式 → 转为单页
+  if ('elements' in data && Array.isArray(data.elements)) {
+    return [{
+      id: 'page-1',
+      name: '页面 1',
+      canvas: data.canvas || { width: 375, height: 812 },
+      elements: data.elements as DesignPage['elements'],
+    }]
+  }
+  return []
+}
+
+// 获取总元素数
+function getTotalElements(data: DesignData): number {
+  return getPages(data).reduce((sum, p) => sum + p.elements.length, 0)
+}
+
+// 缩略图预览组件（支持多页）
+function DesignThumbnail({ design }: { design: DesignData }) {
+  const pages = getPages(design)
+  if (pages.length === 0) return null
+
+  const firstPage = pages[0]
+  const canvasW = firstPage.canvas.width || 375
+  const canvasH = firstPage.canvas.height || 812
   const previewW = 160
   const scale = previewW / canvasW
   const previewH = canvasH * scale
 
   return (
-    <div
-      className="relative bg-gray-900 rounded border border-gray-700 overflow-hidden mt-2"
-      style={{ width: previewW, height: Math.min(previewH, 120) }}
-    >
+    <div className="mt-2">
       <div
-        className="absolute inset-0"
-        style={{
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          width: canvasW,
-          height: canvasH,
-        }}
+        className="relative bg-gray-900 rounded border border-gray-700 overflow-hidden"
+        style={{ width: previewW, height: Math.min(previewH, 120) }}
       >
-        {design.elements.map((el, i) => (
-          <div
-            key={i}
-            className="absolute"
-            style={{
-              left: el.x,
-              top: el.y,
-              width: el.width,
-              height: el.height,
-              background: (el.styles?.background as string) || '#374151',
-              borderRadius: (el.styles?.borderRadius as string) || '0',
-              border: el.type === 'container' ? '1px solid #4b5563' : undefined,
-            }}
-          >
-            {el.type === 'button' && (
-              <div
-                className="w-full h-full flex items-center justify-center text-[8px] overflow-hidden"
-                style={{ color: (el.styles?.color as string) || '#fff' }}
-              >
-                {String(el.props?.text || '')}
-              </div>
-            )}
-            {el.type === 'text' && (
-              <div
-                className="w-full h-full flex items-center overflow-hidden text-[8px]"
-                style={{ color: (el.styles?.color as string) || '#fff' }}
-              >
-                {String(el.props?.text || '')}
-              </div>
-            )}
-            {el.type === 'image' && (
-              <img
-                src={String(el.props?.src || '')}
-                className="w-full h-full"
-                style={{ objectFit: (el.styles?.objectFit as React.CSSProperties['objectFit']) || 'cover' }}
-                alt=""
-              />
-            )}
-            {(el.type === 'input' || el.type === 'icon') && (
-              <div
-                className="w-full h-full flex items-center justify-center text-[6px] text-gray-500 overflow-hidden"
-              >
-                {el.type === 'input' ? String(el.props?.placeholder || '输入框') : String(el.props?.text || '⭐')}
-              </div>
-            )}
-          </div>
-        ))}
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            width: canvasW,
+            height: canvasH,
+          }}
+        >
+          {firstPage.elements.map((el, i) => (
+            <div
+              key={i}
+              className="absolute"
+              style={{
+                left: el.x,
+                top: el.y,
+                width: el.width,
+                height: el.height,
+                background: (el.styles?.background as string) || '#374151',
+                borderRadius: (el.styles?.borderRadius as string) || '0',
+                border: el.type === 'container' ? '1px solid #4b5563' : undefined,
+              }}
+            >
+              {el.type === 'button' && (
+                <div
+                  className="w-full h-full flex items-center justify-center text-[8px] overflow-hidden"
+                  style={{ color: (el.styles?.color as string) || '#fff' }}
+                >
+                  {String(el.props?.text || '')}
+                </div>
+              )}
+              {el.type === 'text' && (
+                <div
+                  className="w-full h-full flex items-center overflow-hidden text-[8px]"
+                  style={{ color: (el.styles?.color as string) || '#fff' }}
+                >
+                  {String(el.props?.text || '')}
+                </div>
+              )}
+              {el.type === 'image' && (
+                <img
+                  src={String(el.props?.src || '')}
+                  className="w-full h-full"
+                  style={{ objectFit: (el.styles?.objectFit as React.CSSProperties['objectFit']) || 'cover' }}
+                  alt=""
+                />
+              )}
+              {(el.type === 'input' || el.type === 'icon') && (
+                <div
+                  className="w-full h-full flex items-center justify-center text-[6px] text-gray-500 overflow-hidden"
+                >
+                  {el.type === 'input' ? String(el.props?.placeholder || '输入框') : String(el.props?.text || '⭐')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+      {pages.length > 1 && (
+        <div className="text-[10px] text-gray-500 mt-1">
+          共 {pages.length} 个页面
+        </div>
+      )}
     </div>
   )
 }
@@ -101,7 +139,7 @@ function AIContent() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { showToast } = useUIStore()
-  const { addElements, setCanvasSize } = useEditorStore()
+  const { setPages, setActivePage, clear } = useEditorStore()
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<AIHistory[]>([])
@@ -111,6 +149,7 @@ function AIContent() {
   const [optimizeMode, setOptimizeMode] = useState(false)
   const [dailyRemaining, setDailyRemaining] = useState<number | null>(null)
   const [dailyLimit, setDailyLimit] = useState<number | null>(null)
+  const [streamProgress, setStreamProgress] = useState<string>('')
 
   const canvasSizes = {
     iphone: { width: 375, height: 812, label: 'iPhone' },
@@ -127,11 +166,11 @@ function AIContent() {
 
   // 示例提示词
   const examplePrompts = [
-    '创建一个现代化的登录页面，包含邮箱、密码输入框和登录按钮',
-    '设计一个电商产品卡片，包含图片、标题、价格和购买按钮',
-    '生成一个用户个人资料页面，包含头像、用户名和编辑按钮',
-    '创建一个仪表板，包含统计卡片、图表和最近活动列表',
-    '设计一个导航栏，包含logo、菜单项和用户头像下拉菜单'
+    '设计一个完整的电商APP，包含启动页、首页、商品详情、购物车和个人中心',
+    '创建一个社交媒体APP，包含登录页、动态流、消息列表和个人主页',
+    '生成一个健身APP，包含首页仪表盘、运动记录、课程列表和我的设置',
+    '设计一个新闻资讯APP，包含启动页、首页推荐、文章详情和收藏夹',
+    '创建一个在线教育APP，包含首页课程推荐、课程详情、学习进度和个人中心',
   ]
 
   useEffect(() => {
@@ -146,17 +185,22 @@ function AIContent() {
     }
 
     setLoading(true)
+    setStreamProgress('')
     try {
       const sizeConfig = canvasSizes[canvasSize]
       const styleDesc = styles[style]
 
-      // 构建增强提示词
       const enhancedPrompt = `${prompt}\n\n设计要求：\n- 画布尺寸：${sizeConfig.width}x${sizeConfig.height}px（${canvasSize}）\n- 设计风格：${styleDesc}\n${optimizeMode ? '- 在当前设计基础上优化改进' : ''}`
 
-      // 获取最近的生成记录作为上下文
       const recentContext = history.slice(0, 3).map(h => h.prompt).join('；')
       const contextPrefix = recentContext ? `之前的生成记录：${recentContext}\n\n` : ''
 
+      // 优化模式下不清空
+      if (!optimizeMode) {
+        clear()
+      }
+
+      // 流式请求
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,62 +208,96 @@ function AIContent() {
           prompt: contextPrefix + enhancedPrompt,
           canvasSize: sizeConfig,
           style,
-        })
+          stream: true,
+        }),
       })
 
-      const result = await response.json()
-
-      // 处理错误状态码
       if (response.status === 401) {
         showToast('请先登录', 'error')
         router.push('/auth/login')
         return
       }
-      if (!result.success || response.status >= 400) {
-        const errorMsg = result.error || '生成失败，请稍后重试'
-        showToast(errorMsg, 'error')
+
+      if (!response.ok) {
+        const result = await response.json()
+        showToast(result.error || '生成失败', 'error')
         return
       }
 
-      if (result.data?.design) {
-        const design = result.data.design
+      // 读取 SSE 流
+      const reader = response.body?.getReader()
+      if (!reader) {
+        showToast('响应流异常', 'error')
+        return
+      }
 
-        // 更新每日剩余次数
-        if (result.data.metadata?.dailyRemaining !== undefined) {
-          setDailyRemaining(result.data.metadata.dailyRemaining)
-          setDailyLimit(result.data.metadata.dailyLimit)
-        }
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+      let receivedPages = 0
+      let firstPageSet = false
 
-        // 优化模式下不清空，追加元素
-        if (!optimizeMode) {
-          const currentElements = useEditorStore.getState().elements
-          if (currentElements.length > 0) {
-            useEditorStore.getState().clear()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        sseBuffer += decoder.decode(value, { stream: true })
+
+        // 解析 SSE 事件（以 \n\n 分隔）
+        const events = sseBuffer.split('\n\n')
+        sseBuffer = events.pop() || '' // 最后一个可能是不完整的
+
+        for (const event of events) {
+          const dataLine = event.trim()
+          if (!dataLine.startsWith('data: ')) continue
+
+          try {
+            const data = JSON.parse(dataLine.slice(6))
+
+            if (data.type === 'progress') {
+              setStreamProgress(data.message || 'AI 正在生成中...')
+
+            } else if (data.type === 'page') {
+              receivedPages++
+              const page = data.page as DesignPage
+              setStreamProgress(`正在生成第 ${receivedPages} 个页面: ${page.name}`)
+
+              useEditorStore.getState().addPage(page)
+              if (!firstPageSet) {
+                useEditorStore.getState().setActivePage(page.id)
+                firstPageSet = true
+                // 第一个页面完成，立即跳转编辑器
+                router.push('/design/editor')
+              }
+
+            } else if (data.type === 'done') {
+              if (data.dailyRemaining !== undefined) {
+                setDailyRemaining(data.dailyRemaining)
+                setDailyLimit(data.dailyLimit)
+              }
+              showToast(`AI 生成了 ${data.totalPages} 个页面`, 'success')
+
+            } else if (data.type === 'error') {
+              showToast(data.error || '生成失败', 'error')
+            }
+          } catch {
+            // 忽略解析错误
           }
         }
-
-        // 设置画布尺寸
-        if (design.canvas) {
-          setCanvasSize({
-            width: design.canvas.width || 375,
-            height: design.canvas.height || 812
-          })
-        }
-
-        // 批量添加生成的元素（只存一次历史）
-        addElements(design.elements as Parameters<typeof addElements>[0])
-
-        showToast(`AI 生成了 ${design.elements.length} 个元素`, 'success')
-
-        // 跳转到编辑器
-        router.push('/design/editor')
-      } else {
-        showToast('AI 未返回有效设计数据，请换个描述试试', 'warning')
       }
-    } catch {
-      showToast('网络连接失败，请检查网络', 'error')
+
+      if (receivedPages === 0) {
+        showToast('AI 未返回有效数据，请重试', 'warning')
+      }
+
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        showToast('生成超时，请简化描述后重试', 'error')
+      } else {
+        showToast('网络连接失败', 'error')
+      }
     } finally {
       setLoading(false)
+      setStreamProgress('')
     }
   }
 
@@ -227,7 +305,7 @@ function AIContent() {
     try {
       const response = await fetch('/api/ai/generate')
       const result = await response.json()
-      
+
       if (result.success) {
         setHistory(result.data)
       }
@@ -236,24 +314,22 @@ function AIContent() {
     }
   }
 
-  const loadDesign = (design: DesignOutput) => {
-    const currentElements = useEditorStore.getState().elements
+  const loadDesign = (design: DesignData) => {
+    const pages = getPages(design)
+    if (pages.length === 0) return
+
+    const currentElements = useEditorStore.getState().getActivePage()?.elements ?? []
     if (currentElements.length > 0) {
       if (!confirm('当前画布有内容，确定要覆盖吗？')) return
     }
 
-    useEditorStore.getState().clear()
-    
-    if (design.canvas) {
-      setCanvasSize({
-        width: design.canvas.width || 375,
-        height: design.canvas.height || 812
-      })
+    clear()
+    setPages(pages)
+    if (pages.length > 0) {
+      setActivePage(pages[0].id)
     }
 
-    addElements(design.elements as Parameters<typeof addElements>[0])
-
-    showToast('设计已加载', 'success')
+    showToast(`已加载 ${pages.length} 个页面`, 'success')
     router.push('/design/editor')
   }
 
@@ -314,7 +390,7 @@ function AIContent() {
               <div className="flex items-center space-x-2 mb-4">
                 <Sparkles size={20} className="text-purple-400" />
                 <h2 className="text-lg font-semibold text-gray-200">
-                  描述你想要的设计
+                  描述你想要的 APP 设计
                 </h2>
               </div>
 
@@ -369,14 +445,14 @@ function AIContent() {
                     onChange={(e) => setOptimizeMode(e.target.checked)}
                     className="rounded border-gray-600 bg-gray-700 text-purple-600 focus:ring-purple-500"
                   />
-                  <span className="text-xs text-gray-400">在当前设计基础上优化（不清空画布）</span>
+                  <span className="text-xs text-gray-400">在当前设计基础上优化（追加页面）</span>
                 </label>
               )}
 
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="例如：创建一个现代化的登录页面，包含邮箱、密码输入框和登录按钮"
+                placeholder="例如：设计一个完整的电商APP，包含启动页、首页、商品详情、购物车和个人中心"
                 className={cn(
                   'w-full h-32 p-4 bg-gray-900 border border-gray-700 rounded-lg',
                   'text-gray-200 placeholder-gray-600 resize-none focus:outline-none',
@@ -414,12 +490,12 @@ function AIContent() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    <span>生成中...</span>
+                    <span>{streamProgress || '生成中...'}</span>
                   </>
                 ) : (
                   <>
                     <Send size={18} />
-                    <span>生成设计</span>
+                    <span>启动 UI 设计</span>
                   </>
                 )}
               </button>
@@ -456,10 +532,10 @@ function AIContent() {
                 提示技巧
               </h3>
               <ul className="text-xs text-gray-400 space-y-2">
-                <li>• 描述具体元素：登录表单、按钮、卡片等</li>
-                <li>• 说明布局：居中、左右排列、网格等</li>
+                <li>• 描述完整 APP：包含多个页面（启动页、首页、详情页等）</li>
+                <li>• 说明功能流：用户从哪到哪，页面间如何跳转</li>
                 <li>• 指定风格：现代、简约、科技感等</li>
-                <li>• 包含功能：搜索框、导航、表单等</li>
+                <li>• 包含关键页面：登录、首页、详情、个人中心</li>
               </ul>
             </div>
           </div>
@@ -531,7 +607,8 @@ function AIContent() {
                     </button>
                   </div>
                   <div className="flex items-center space-x-3 text-xs text-gray-500">
-                    <span>元素: {item.response?.elements?.length || 0}</span>
+                    <span>页面: {getPages(item.response).length}</span>
+                    <span>元素: {getTotalElements(item.response)}</span>
                     <span>Token: {item.tokensUsed}</span>
                     <span>成本: ${item.cost.toFixed(4)}</span>
                     <span className={cn(
