@@ -7,6 +7,7 @@ import { EditorElement, EditorHistory,EditorState } from '@/types'
 interface EditorStore extends EditorState {
   // Element operations
   addElement: (element: Omit<EditorElement, 'id'>) => string
+  addElements: (elements: Omit<EditorElement, 'id'>[]) => void
   updateElement: (id: string, updates: Partial<EditorElement>) => void
   deleteElement: (id: string) => void
   selectElement: (id: string, multiSelect?: boolean) => void
@@ -84,15 +85,29 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   addElement: (element) => {
     const id = generateId('element')
     const newElement = { ...element, id }
-    
+
     set((state) => ({
       elements: [...state.elements, newElement],
     }))
-    
+
     // 保存历史
     get().saveHistory('Add Element')
-    
+
     return id
+  },
+
+  addElements: (newElements) => {
+    const elementsWithIds = newElements.map(el => ({
+      ...el,
+      id: generateId('element')
+    }))
+
+    set((state) => ({
+      elements: [...state.elements, ...elementsWithIds],
+    }))
+
+    // 只存一次历史
+    get().saveHistory('Add Elements')
   },
 
   updateElement: (id, updates) => {

@@ -26,7 +26,6 @@ const CanvasElement = React.memo<{
         top: element.y,
         width: element.width,
         height: element.height,
-        ...(element.styles || {})
       }}
       onMouseDown={(e) => onMouseDown(e, element)}
     >
@@ -50,7 +49,7 @@ const CanvasElement = React.memo<{
 
       {element.type === 'container' && (
         <div
-          className="w-full h-full border border-gray-600 bg-gray-800/50"
+          className="w-full h-full"
           style={element.styles as React.CSSProperties}
         >
           {String(element.props?.children || '')}
@@ -71,7 +70,7 @@ const CanvasElement = React.memo<{
         <input
           type={String(element.props?.type || 'text')}
           placeholder={String(element.props?.placeholder || '请输入...')}
-          className="w-full h-full px-3 bg-gray-800 border border-gray-600 rounded text-gray-200 text-sm outline-none"
+          className="w-full h-full px-3 outline-none"
           style={element.styles as React.CSSProperties}
           readOnly
         />

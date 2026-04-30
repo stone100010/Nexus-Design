@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { prompt, projectId } = body
+    const { prompt, projectId, canvasSize } = body
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json(
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 4000,
       response_format: { type: 'json_object' }
     })
 
@@ -139,6 +139,27 @@ export async function POST(request: NextRequest) {
     // 验证响应格式
     if (!designData.elements || !Array.isArray(designData.elements)) {
       throw new Error('AI 响应缺少 elements 数组')
+    }
+
+    // 校验每个元素的基本字段，过滤不合格的
+    designData.elements = designData.elements.filter((el: Record<string, unknown>) => {
+      return el.type && typeof el.x === 'number' && typeof el.y === 'number'
+        && typeof el.width === 'number' && typeof el.height === 'number'
+    }).map((el: Record<string, unknown>) => ({
+      type: el.type,
+      x: el.x,
+      y: el.y,
+      width: Math.max(10, el.width as number),
+      height: Math.max(10, el.height as number),
+      props: el.props || {},
+      styles: el.styles || {},
+    }))
+
+    // 如果前端传了 canvasSize，用它覆盖 AI 返回的 canvas
+    if (canvasSize?.width && canvasSize?.height) {
+      designData.canvas = { width: canvasSize.width, height: canvasSize.height }
+    } else if (!designData.canvas) {
+      designData.canvas = { width: 375, height: 812 }
     }
 
     // 计算消耗的 token 数

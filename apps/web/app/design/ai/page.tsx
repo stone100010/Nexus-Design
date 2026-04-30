@@ -101,7 +101,7 @@ function AIContent() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { showToast } = useUIStore()
-  const { addElement, setCanvasSize } = useEditorStore()
+  const { addElements, setCanvasSize } = useEditorStore()
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<AIHistory[]>([])
@@ -209,10 +209,8 @@ function AIContent() {
           })
         }
 
-        // 添加生成的元素
-        design.elements.forEach((element: DesignOutput['elements'][number]) => {
-          addElement(element as Parameters<typeof addElement>[0])
-        })
+        // 批量添加生成的元素（只存一次历史）
+        addElements(design.elements as Parameters<typeof addElements>[0])
 
         showToast(`AI 生成了 ${design.elements.length} 个元素`, 'success')
 
@@ -256,9 +254,7 @@ function AIContent() {
       })
     }
 
-    design.elements.forEach((element: DesignOutput['elements'][number]) => {
-      addElement(element as Parameters<typeof addElement>[0])
-    })
+    addElements(design.elements as Parameters<typeof addElements>[0])
 
     showToast('设计已加载', 'success')
     router.push('/design/editor')
