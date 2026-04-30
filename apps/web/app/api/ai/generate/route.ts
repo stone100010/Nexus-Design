@@ -6,11 +6,12 @@ import { handleApiError } from '@/lib/api-error'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-// 初始化 OpenAI 客户端
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL || 'https://apis.iflow.cn/v1'
-})
+function getOpenAI() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: process.env.OPENAI_BASE_URL || 'https://apis.iflow.cn/v1'
+  })
+}
 
 // 系统提示词 - 用于指导 AI 生成 UI 设计
 const SYSTEM_PROMPT = `
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 OpenAI API
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: process.env.OPENAI_MODEL || 'deepseek-v3.2',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -204,7 +205,10 @@ export async function POST(request: NextRequest) {
       // 静默处理数据库记录失败
     }
 
-    return handleApiError(error)
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : '未知错误' },
+      { status: 500 }
+    )
   }
 }
 
