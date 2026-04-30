@@ -75,6 +75,21 @@ function DesignThumbnail({ design }: { design: DesignOutput }) {
                 {String(el.props?.text || '')}
               </div>
             )}
+            {el.type === 'image' && (
+              <img
+                src={String(el.props?.src || '')}
+                className="w-full h-full"
+                style={{ objectFit: (el.styles?.objectFit as React.CSSProperties['objectFit']) || 'cover' }}
+                alt=""
+              />
+            )}
+            {(el.type === 'input' || el.type === 'icon') && (
+              <div
+                className="w-full h-full flex items-center justify-center text-[6px] text-gray-500 overflow-hidden"
+              >
+                {el.type === 'input' ? String(el.props?.placeholder || '输入框') : String(el.props?.text || '⭐')}
+              </div>
+            )}
           </div>
         ))}
       </div>

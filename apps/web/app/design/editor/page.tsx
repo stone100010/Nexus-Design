@@ -244,12 +244,18 @@ function DesignEditorContent() {
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
         className="rounded-md border px-3 py-2"
       />`
+      } else if (el.type === 'image') {
+        return `      <img
+        src="${el.props?.src || ''}"
+        alt="${el.props?.alt || ''}"
+        style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
+      />`
       } else {
         return `      <div
         style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
         className="rounded-md"
       >
-        ${el.props?.children || ''}
+        ${el.props?.text || el.props?.children || ''}
       </div>`
       }
     }).join('\n\n')
@@ -276,8 +282,10 @@ ${elementCode}
         return `    <div style="${style}">${el.props?.text || '文本'}</div>`
       } else if (el.type === 'input') {
         return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" class="rounded-md border px-3 py-2" />`
+      } else if (el.type === 'image') {
+        return `    <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
       } else {
-        return `    <div style="${style}" class="rounded-md">${el.props?.children || ''}</div>`
+        return `    <div style="${style}" class="rounded-md">${el.props?.text || el.props?.children || ''}</div>`
       }
     }).join('\n')
 
@@ -312,8 +320,10 @@ ${elementCode}
         return `    <div style="${style}">${el.props?.text || '文本'}</div>`
       } else if (el.type === 'input') {
         return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" />`
+      } else if (el.type === 'image') {
+        return `    <img src="${el.props?.src || ''}" alt="${el.props?.alt || ''}" style="${style}" />`
       } else {
-        return `    <div style="${style}">${el.props?.children || ''}</div>`
+        return `    <div style="${style}">${el.props?.text || el.props?.children || ''}</div>`
       }
     }).join('\n')
 
