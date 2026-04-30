@@ -1,30 +1,114 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSession, SessionProvider } from 'next-auth/react'
-import { ThemeProvider } from 'next-themes'
-import { useUIStore } from '@/app/stores/ui'
-import { Button } from '@/app/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card'
-import { Send, History, Sparkles, Loader2, Copy, Check } from 'lucide-react'
-import { useEditorStore } from '@/app/stores/editor'
+import { History, Loader2, Send, Sparkles, Wand2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import { useEffect,useState } from 'react'
+
+import { Navbar } from '@/components/shared/navbar'
+import { cn } from '@/lib/utils'
+import { useEditorStore } from '@/stores/editor'
+import { useUIStore } from '@/stores/ui'
+import { DesignOutput } from '@/types'
 
 interface AIHistory {
   id: string
   prompt: string
-  result: any
-  timestamp: string
+  response: DesignOutput
+  createdAt: string
+  tokensUsed: number
   cost: number
+  status: 'SUCCESS' | 'FAILED' | 'PENDING'
+}
+
+// 缩略图预览组件
+function DesignThumbnail({ design }: { design: DesignOutput }) {
+  if (!design?.elements?.length || !design?.canvas) return null
+
+  const canvasW = design.canvas.width || 375
+  const canvasH = design.canvas.height || 812
+  const previewW = 160
+  const scale = previewW / canvasW
+  const previewH = canvasH * scale
+
+  return (
+    <div
+      className="relative bg-gray-900 rounded border border-gray-700 overflow-hidden mt-2"
+      style={{ width: previewW, height: Math.min(previewH, 120) }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: canvasW,
+          height: canvasH,
+        }}
+      >
+        {design.elements.map((el, i) => (
+          <div
+            key={i}
+            className="absolute"
+            style={{
+              left: el.x,
+              top: el.y,
+              width: el.width,
+              height: el.height,
+              background: (el.styles?.background as string) || '#374151',
+              borderRadius: (el.styles?.borderRadius as string) || '0',
+              border: el.type === 'container' ? '1px solid #4b5563' : undefined,
+            }}
+          >
+            {el.type === 'button' && (
+              <div
+                className="w-full h-full flex items-center justify-center text-[8px] overflow-hidden"
+                style={{ color: (el.styles?.color as string) || '#fff' }}
+              >
+                {String(el.props?.text || '')}
+              </div>
+            )}
+            {el.type === 'text' && (
+              <div
+                className="w-full h-full flex items-center overflow-hidden text-[8px]"
+                style={{ color: (el.styles?.color as string) || '#fff' }}
+              >
+                {String(el.props?.text || '')}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function AIContent() {
+  const router = useRouter()
   const { data: session, status } = useSession()
   const { showToast } = useUIStore()
-  const { addElement } = useEditorStore()
+  const { addElement, setCanvasSize } = useEditorStore()
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<AIHistory[]>([])
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate')
+  const [canvasSize, setCanvasSizeLocal] = useState<'iphone' | 'ipad' | 'desktop'>('iphone')
+  const [style, setStyle] = useState<'modern' | 'minimal' | 'tech' | 'cute'>('modern')
+  const [optimizeMode, setOptimizeMode] = useState(false)
+  const [dailyRemaining, setDailyRemaining] = useState<number | null>(null)
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null)
+
+  const canvasSizes = {
+    iphone: { width: 375, height: 812, label: 'iPhone' },
+    ipad: { width: 768, height: 1024, label: 'iPad' },
+    desktop: { width: 1920, height: 1080, label: 'Desktop' },
+  }
+
+  const styles = {
+    modern: '现代风格：圆角、渐变、阴影',
+    minimal: '简约风格：留白、细线、单色',
+    tech: '科技风格：深色、霓虹、几何',
+    cute: '可爱风格：粉色、圆润、卡通',
+  }
 
   // 示例提示词
   const examplePrompts = [
@@ -35,6 +119,11 @@ function AIContent() {
     '设计一个导航栏，包含logo、菜单项和用户头像下拉菜单'
   ]
 
+  useEffect(() => {
+    loadHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       showToast('请输入描述', 'warning')
@@ -43,21 +132,58 @@ function AIContent() {
 
     setLoading(true)
     try {
+      const sizeConfig = canvasSizes[canvasSize]
+      const styleDesc = styles[style]
+
+      // 构建增强提示词
+      const enhancedPrompt = `${prompt}\n\n设计要求：\n- 画布尺寸：${sizeConfig.width}x${sizeConfig.height}px（${canvasSize}）\n- 设计风格：${styleDesc}\n${optimizeMode ? '- 在当前设计基础上优化改进' : ''}`
+
+      // 获取最近的生成记录作为上下文
+      const recentContext = history.slice(0, 3).map(h => h.prompt).join('；')
+      const contextPrefix = recentContext ? `之前的生成记录：${recentContext}\n\n` : ''
+
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({
+          prompt: contextPrefix + enhancedPrompt,
+          canvasSize: sizeConfig,
+          style,
+        })
       })
+
+      // 处理特定 HTTP 状态码
+      if (response.status === 401) {
+        showToast('请先登录', 'error')
+        router.push('/auth/login')
+        return
+      }
+      if (response.status === 429) {
+        showToast('请求过于频繁，请稍后再试', 'warning')
+        return
+      }
+      if (response.status >= 500) {
+        showToast('AI 服务暂时不可用，请稍后重试', 'error')
+        return
+      }
 
       const result = await response.json()
 
       if (result.success && result.data?.design) {
         const design = result.data.design
 
-        // 清空当前画布
-        const currentElements = useEditorStore.getState().elements
-        if (currentElements.length > 0) {
-          useEditorStore.getState().clear()
+        // 更新每日剩余次数
+        if (result.data.metadata?.dailyRemaining !== undefined) {
+          setDailyRemaining(result.data.metadata.dailyRemaining)
+          setDailyLimit(result.data.metadata.dailyLimit)
+        }
+
+        // 优化模式下不清空，追加元素
+        if (!optimizeMode) {
+          const currentElements = useEditorStore.getState().elements
+          if (currentElements.length > 0) {
+            useEditorStore.getState().clear()
+          }
         }
 
         // 设置画布尺寸
@@ -69,20 +195,19 @@ function AIContent() {
         }
 
         // 添加生成的元素
-        design.elements.forEach((element: any) => {
-          addElement(element)
+        design.elements.forEach((element: DesignOutput['elements'][number]) => {
+          addElement(element as Parameters<typeof addElement>[0])
         })
 
         showToast(`AI 生成了 ${design.elements.length} 个元素`, 'success')
-        
+
         // 跳转到编辑器
         router.push('/design/editor')
       } else {
         showToast(result.error || '生成失败', 'error')
       }
-    } catch (error) {
-      showToast('请求失败，请检查网络', 'error')
-      console.error(error)
+    } catch {
+      showToast('网络连接失败，请检查网络', 'error')
     } finally {
       setLoading(false)
     }
@@ -96,12 +221,12 @@ function AIContent() {
       if (result.success) {
         setHistory(result.data)
       }
-    } catch (error) {
-      console.error('加载历史失败:', error)
+    } catch {
+      showToast('加载历史失败', 'error')
     }
   }
 
-  const loadDesign = (design: any) => {
+  const loadDesign = (design: DesignOutput) => {
     const currentElements = useEditorStore.getState().elements
     if (currentElements.length > 0) {
       if (!confirm('当前画布有内容，确定要覆盖吗？')) return
@@ -116,8 +241,8 @@ function AIContent() {
       })
     }
 
-    design.elements.forEach((element: any) => {
-      addElement(element)
+    design.elements.forEach((element: DesignOutput['elements'][number]) => {
+      addElement(element as Parameters<typeof addElement>[0])
     })
 
     showToast('设计已加载', 'success')
@@ -138,21 +263,7 @@ function AIContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {/* 顶部导航 */}
-      <div className="h-14 bg-gray-800 border-b border-gray-700 flex items-center px-4">
-        <button
-          onClick={() => router.push('/workspace')}
-          className="flex items-center space-x-2 text-gray-400 hover:text-gray-200 transition-colors mr-4"
-        >
-          <ArrowLeft size={18} />
-          <span className="text-sm">返回</span>
-        </button>
-        
-        <div className="flex items-center space-x-2 text-purple-400">
-          <Zap size={20} />
-          <h1 className="text-sm font-semibold">AI 设计生成器</h1>
-        </div>
-      </div>
+      <Navbar />
 
       {/* 主要内容 */}
       <div className="max-w-4xl mx-auto p-6">
@@ -199,6 +310,61 @@ function AIContent() {
                 </h2>
               </div>
 
+              {/* 设备尺寸选择 */}
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-2">画布尺寸</div>
+                <div className="flex space-x-2">
+                  {(Object.keys(canvasSizes) as Array<keyof typeof canvasSizes>).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setCanvasSizeLocal(key)}
+                      className={cn(
+                        'px-3 py-1.5 text-xs rounded-lg transition-all',
+                        canvasSize === key
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      )}
+                    >
+                      {canvasSizes[key].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 风格选择 */}
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-2">设计风格</div>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(styles) as Array<keyof typeof styles>).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setStyle(key)}
+                      className={cn(
+                        'px-3 py-1.5 text-xs rounded-lg transition-all',
+                        style === key
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      )}
+                    >
+                      {key === 'modern' ? '现代' : key === 'minimal' ? '简约' : key === 'tech' ? '科技' : '可爱'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 优化模式 */}
+              {history.length > 0 && (
+                <label className="flex items-center space-x-2 mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={optimizeMode}
+                    onChange={(e) => setOptimizeMode(e.target.checked)}
+                    className="rounded border-gray-600 bg-gray-700 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="text-xs text-gray-400">在当前设计基础上优化（不清空画布）</span>
+                </label>
+              )}
+
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -211,13 +377,28 @@ function AIContent() {
                 disabled={loading}
               />
 
+              {dailyRemaining !== null && dailyLimit !== null && (
+                <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                  <span>今日剩余: {dailyRemaining} / {dailyLimit}</span>
+                  <div className="w-24 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        dailyRemaining > 10 ? 'bg-green-500' : dailyRemaining > 3 ? 'bg-yellow-500' : 'bg-red-500'
+                      )}
+                      style={{ width: `${(dailyRemaining / dailyLimit) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleGenerate}
-                disabled={loading || !prompt.trim()}
+                disabled={loading || !prompt.trim() || dailyRemaining === 0}
                 className={cn(
                   'w-full mt-4 flex items-center justify-center space-x-2',
                   'py-3 rounded-lg font-medium transition-all',
-                  loading || !prompt.trim()
+                  loading || !prompt.trim() || dailyRemaining === 0
                     ? 'bg-gray-600 cursor-not-allowed opacity-50'
                     : 'bg-purple-600 hover:bg-purple-700 text-white'
                 )}
@@ -246,11 +427,13 @@ function AIContent() {
                   <button
                     key={index}
                     onClick={() => setPrompt(example)}
+                    disabled={loading}
                     className={cn(
                       'w-full text-left p-3 rounded-lg bg-gray-900',
                       'text-gray-400 hover:text-gray-200 hover:bg-gray-700',
                       'transition-all text-sm border border-transparent',
-                      'hover:border-gray-600'
+                      'hover:border-gray-600',
+                      loading && 'opacity-50 cursor-not-allowed'
                     )}
                   >
                     {example}
@@ -277,6 +460,28 @@ function AIContent() {
         {/* 历史记录面板 */}
         {activeTab === 'history' && (
           <div className="space-y-4">
+            {/* 使用量统计 */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">使用量统计</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-400">{history.length}</div>
+                  <div className="text-xs text-gray-500">总调用次数</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-400">
+                    {history.reduce((sum, h) => sum + (h.tokensUsed || 0), 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-500">Token 消耗</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-400">
+                    ${history.reduce((sum, h) => sum + (h.cost || 0), 0).toFixed(2)}
+                  </div>
+                  <div className="text-xs text-gray-500">总成本</div>
+                </div>
+              </div>
+            </div>
             {history.length === 0 ? (
               <div className="bg-gray-800 rounded-lg p-8 text-center border border-gray-700">
                 <History size={40} className="mx-auto mb-3 text-gray-600" />
@@ -302,6 +507,9 @@ function AIContent() {
                       <div className="text-xs text-gray-500 mt-1">
                         {new Date(item.createdAt).toLocaleString()}
                       </div>
+                      {item.status === 'SUCCESS' && item.response && (
+                        <DesignThumbnail design={item.response} />
+                      )}
                     </div>
                     <button
                       onClick={() => loadDesign(item.response)}
@@ -333,4 +541,8 @@ function AIContent() {
       </div>
     </div>
   )
+}
+
+export default function AIPage() {
+  return <AIContent />
 }

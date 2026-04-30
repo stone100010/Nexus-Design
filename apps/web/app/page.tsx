@@ -134,6 +134,113 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Product Screenshots */}
+      <div className="max-w-6xl mx-auto px-8 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-2">产品预览</h2>
+          <p className="text-muted">直观了解 Nexus Design 的核心界面</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* AI Generation */}
+          <div className="group">
+            <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-800/50 hover:border-purple-500/50 transition-all">
+              <div className="bg-gray-900 px-4 py-2 flex items-center space-x-2 border-b border-gray-700">
+                <div className="flex space-x-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                </div>
+                <span className="text-xs text-gray-500 ml-2">AI 生成</span>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex space-x-2">
+                  <div className="px-2 py-1 bg-purple-600 rounded text-[10px] text-white">iPhone</div>
+                  <div className="px-2 py-1 bg-gray-700 rounded text-[10px] text-gray-400">iPad</div>
+                  <div className="px-2 py-1 bg-gray-700 rounded text-[10px] text-gray-400">Desktop</div>
+                </div>
+                <div className="flex space-x-2">
+                  <div className="px-2 py-1 bg-purple-600 rounded text-[10px] text-white">现代</div>
+                  <div className="px-2 py-1 bg-gray-700 rounded text-[10px] text-gray-400">简约</div>
+                  <div className="px-2 py-1 bg-gray-700 rounded text-[10px] text-gray-400">科技</div>
+                </div>
+                <div className="bg-gray-900 rounded p-3 text-[10px] text-gray-500 border border-gray-700">
+                  创建一个现代化的登录页面...
+                </div>
+                <div className="flex items-center justify-center py-2">
+                  <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[10px] text-purple-400 ml-2">AI 生成中...</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-3 font-medium">AI 智能生成</p>
+          </div>
+
+          {/* Visual Editor */}
+          <div className="group">
+            <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-800/50 hover:border-blue-500/50 transition-all">
+              <div className="bg-gray-900 px-4 py-2 flex items-center space-x-2 border-b border-gray-700">
+                <div className="flex space-x-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                </div>
+                <span className="text-xs text-gray-500 ml-2">可视化编辑器</span>
+              </div>
+              <div className="flex">
+                <div className="w-10 bg-gray-800 border-r border-gray-700 p-1 space-y-1">
+                  <div className="w-full h-6 bg-gray-700 rounded" />
+                  <div className="w-full h-6 bg-gray-700 rounded" />
+                  <div className="w-full h-6 bg-gray-700 rounded" />
+                </div>
+                <div className="flex-1 p-3 bg-gray-900/50 min-h-[140px] relative">
+                  <div className="absolute top-3 left-3 w-20 h-8 bg-indigo-600 rounded flex items-center justify-center text-[9px] text-white">按钮</div>
+                  <div className="absolute top-14 left-3 w-28 h-4 bg-gray-700 rounded" />
+                  <div className="absolute top-3 right-3 w-16 h-16 bg-gray-700 rounded border border-blue-500 border-dashed" />
+                </div>
+                <div className="w-16 bg-gray-800 border-l border-gray-700 p-1 space-y-1">
+                  <div className="w-full h-3 bg-gray-700 rounded" />
+                  <div className="w-full h-3 bg-gray-700 rounded" />
+                  <div className="w-3/4 h-3 bg-gray-700 rounded" />
+                </div>
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-3 font-medium">可视化编辑器</p>
+          </div>
+
+          {/* Code Export */}
+          <div className="group">
+            <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-800/50 hover:border-green-500/50 transition-all">
+              <div className="bg-gray-900 px-4 py-2 flex items-center space-x-2 border-b border-gray-700">
+                <div className="flex space-x-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                </div>
+                <span className="text-xs text-gray-500 ml-2">代码导出</span>
+              </div>
+              <div className="p-3 bg-gray-900 font-mono text-[10px] leading-relaxed">
+                <div><span className="text-purple-400">{'import'}</span> <span className="text-gray-300">{'{ Button }'}</span> <span className="text-purple-400">from</span> <span className="text-green-400">&apos;./components&apos;</span></div>
+                <div className="mt-1"><span className="text-purple-400">{'export default'}</span> <span className="text-blue-400">function</span> <span className="text-yellow-400">LoginPage</span>() {'{'}</div>
+                <div className="ml-3"><span className="text-purple-400">return</span> (</div>
+                <div className="ml-6">{'<'}<span className="text-blue-400">div</span> <span className="text-green-400">className</span>=<span className="text-orange-400">&quot;min-h-screen&quot;</span>{'>'}</div>
+                <div className="ml-9">{'<'}<span className="text-blue-400">input</span> <span className="text-green-400">type</span>=<span className="text-orange-400">&quot;email&quot;</span> /{'>'}</div>
+                <div className="ml-9">{'<'}<span className="text-blue-400">Button</span>{'>'}登录{'</'}<span className="text-blue-400">Button</span>{'>'}</div>
+                <div className="ml-6">{'</'}<span className="text-blue-400">div</span>{'>'}</div>
+                <div className="ml-3">)</div>
+                <div>{'}'}</div>
+              </div>
+              <div className="flex border-t border-gray-700">
+                <div className="flex-1 text-center py-1.5 text-[10px] text-purple-400 border-b-2 border-purple-500 bg-gray-800/50">React</div>
+                <div className="flex-1 text-center py-1.5 text-[10px] text-gray-500">Vue</div>
+                <div className="flex-1 text-center py-1.5 text-[10px] text-gray-500">HTML</div>
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-3 font-medium">多框架代码导出</p>
+          </div>
+        </div>
+      </div>
+
       {/* Demo Showcase */}
       <div className="max-w-6xl mx-auto px-8 py-16">
         <div className="text-center mb-12">
@@ -198,6 +305,116 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Pricing Section */}
+      <div className="max-w-6xl mx-auto px-8 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-2">定价方案</h2>
+          <p className="text-muted">选择适合您的方案</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="border-gray-700">
+            <CardHeader>
+              <CardTitle>免费版</CardTitle>
+              <CardDescription>个人开发者</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-4">¥0<span className="text-sm font-normal text-muted">/月</span></div>
+              <ul className="text-sm text-muted space-y-2">
+                <li>• 每日 5 次 AI 生成</li>
+                <li>• 3 个项目</li>
+                <li>• 基础组件库</li>
+                <li>• React 代码导出</li>
+              </ul>
+              <Button className="w-full mt-6" variant="secondary">开始使用</Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/50 relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-white text-xs rounded-full">推荐</div>
+            <CardHeader>
+              <CardTitle>专业版</CardTitle>
+              <CardDescription>专业设计师</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-4">¥99<span className="text-sm font-normal text-muted">/月</span></div>
+              <ul className="text-sm text-muted space-y-2">
+                <li>• 无限 AI 生成</li>
+                <li>• 无限项目</li>
+                <li>• 完整组件库</li>
+                <li>• 多框架代码导出</li>
+                <li>• 版本管理</li>
+              </ul>
+              <Button className="w-full mt-6">立即订阅</Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-gray-700">
+            <CardHeader>
+              <CardTitle>企业版</CardTitle>
+              <CardDescription>团队协作</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-4">¥299<span className="text-sm font-normal text-muted">/月</span></div>
+              <ul className="text-sm text-muted space-y-2">
+                <li>• 专业版全部功能</li>
+                <li>• 实时协作</li>
+                <li>• 团队管理</li>
+                <li>• 优先支持</li>
+                <li>• 自定义部署</li>
+              </ul>
+              <Button className="w-full mt-6" variant="outline">联系我们</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Testimonials */}
+      <div className="max-w-6xl mx-auto px-8 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-2">用户评价</h2>
+          <p className="text-muted">来自设计师和开发者的真实反馈</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              name: '张明',
+              role: '前端开发工程师',
+              content: 'Nexus Design 让我从设计稿到代码的时间缩短了 80%。AI 生成的代码质量非常高，几乎可以直接用到生产环境。',
+              avatar: 'Z',
+            },
+            {
+              name: '李雪',
+              role: 'UI 设计师',
+              content: '终于有一个工具能让设计师和开发者的协作变得如此顺畅。实时预览和代码导出功能太棒了！',
+              avatar: 'L',
+            },
+            {
+              name: '王浩',
+              role: '创业公司 CTO',
+              content: '我们用 Nexus Design 在一周内完成了整个 MVP 的 UI 设计和前端开发。节省了大量的时间和人力成本。',
+              avatar: 'W',
+            },
+          ].map((testimonial, index) => (
+            <Card key={index} className="border-gray-700">
+              <CardContent className="pt-6">
+                <p className="text-sm text-gray-300 mb-4">&ldquo;{testimonial.content}&rdquo;</p>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold">
+                    {testimonial.avatar}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-200">{testimonial.name}</div>
+                    <div className="text-xs text-gray-500">{testimonial.role}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
       {/* CTA Section */}
       <div className="max-w-4xl mx-auto px-8 py-16 text-center">
         <div className="p-12 rounded-2xl bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30">
@@ -223,11 +440,66 @@ export default function Home() {
         </div>
       </div>
 
+      {/* FAQ Section */}
+      <div className="max-w-4xl mx-auto px-8 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-2">常见问题</h2>
+          <p className="text-muted">快速了解 Nexus Design</p>
+        </div>
+
+        <div className="space-y-4">
+          {[
+            {
+              q: 'Nexus Design 是什么？',
+              a: 'Nexus Design 是一个 AI 驱动的设计即代码平台，让设计师和开发者能够通过自然语言描述快速生成高质量的 UI 设计和生产级代码。'
+            },
+            {
+              q: '支持哪些代码框架？',
+              a: '目前支持 React/Next.js，计划中支持 Vue、Angular、微信小程序、iOS SwiftUI 和 Android Jetpack Compose。'
+            },
+            {
+              q: '如何开始使用？',
+              a: '注册账号后即可免费使用基础功能。在工作区点击"AI 生成"，输入设计描述，AI 会自动为您生成界面。'
+            },
+            {
+              q: '生成的设计可以导出吗？',
+              a: '可以。编辑器支持导出为 React TSX 代码，包含完整的样式和组件结构。'
+            }
+          ].map((item, index) => (
+            <div key={index} className="p-4 rounded-lg bg-gray-800/50 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-200 mb-2">{item.q}</h3>
+              <p className="text-sm text-gray-400">{item.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Footer */}
       <div className="border-t border-primary/10 mt-16">
-        <div className="max-w-6xl mx-auto px-8 py-8 text-center text-sm text-muted">
-          <p>Nexus Design © 2025 - 统一设计平台</p>
-          <p className="mt-2">基于 Next.js 16.0.10 + TypeScript 5.3.3 构建</p>
+        <div className="max-w-6xl mx-auto px-8 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between text-sm text-muted">
+            <div className="flex items-center space-x-4 mb-4 md:mb-0">
+              <span className="font-semibold text-gray-300">Nexus Design</span>
+              <span>© 2025</span>
+            </div>
+            <div className="flex items-center space-x-6">
+              <a href="/workspace" className="hover:text-primary transition-colors">工作区</a>
+              <a href="/design/ai" className="hover:text-primary transition-colors">AI 生成</a>
+              <a href="/auth/login" className="hover:text-primary transition-colors">登录</a>
+              <a href="/auth/register" className="hover:text-primary transition-colors">注册</a>
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row items-center justify-between mt-6 pt-6 border-t border-gray-800">
+            <div className="flex items-center space-x-6 text-xs text-gray-600">
+              <a href="/docs/DEVELOPMENT.md" className="hover:text-gray-400 transition-colors">开发文档</a>
+              <a href="/docs/DEPLOYMENT.md" className="hover:text-gray-400 transition-colors">部署指南</a>
+              <a href="/docs/API.md" className="hover:text-gray-400 transition-colors">API 文档</a>
+              <a href="https://github.com/stone100010/Nexus-Design" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">GitHub</a>
+            </div>
+          </div>
+          <div className="text-center text-xs text-gray-600 mt-4">
+            基于 Next.js + TypeScript + Prisma 构建
+          </div>
         </div>
       </div>
     </main>

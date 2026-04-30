@@ -35,7 +35,7 @@ const initialState: UIState = {
 
 export const useUIStore = create<UIStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...initialState,
       toast: null,
 

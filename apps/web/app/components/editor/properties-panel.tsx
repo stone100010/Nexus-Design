@@ -1,12 +1,13 @@
 'use client'
 
-import { 
+import {
   ArrowDown,
   ArrowUp,
+  Bookmark,
   Copy,
-  Layout, 
-  Palette, 
-  Settings, 
+  Layout,
+  Palette,
+  Settings,
   Trash2,
   Type} from 'lucide-react'
 import React, { useEffect,useState } from 'react'
@@ -36,7 +37,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
 
   const selectedElement = elements.find(el => selectedElementIds.includes(el.id))
 
-  // 表单状态
+  // Form state
   const [formData, setFormData] = useState({
     x: 0,
     y: 0,
@@ -45,12 +46,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
     background: '',
     color: '',
     fontSize: '',
+    fontWeight: '',
     borderRadius: '',
     padding: '',
+    borderWidth: '',
+    borderColor: '',
+    borderStyle: '',
+    boxShadow: '',
+    opacity: '',
     text: ''
   })
 
-  // 同步表单数据
+  // Sync form data from selected element
   useEffect(() => {
     if (selectedElement) {
       setFormData({
@@ -58,17 +65,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
         y: selectedElement.y || 0,
         width: selectedElement.width || 0,
         height: selectedElement.height || 0,
-        background: selectedElement.styles?.background || '',
-        color: selectedElement.styles?.color || '',
-        fontSize: selectedElement.styles?.fontSize || '',
-        borderRadius: selectedElement.styles?.borderRadius || '',
-        padding: selectedElement.styles?.padding || '',
-        text: selectedElement.props?.text || ''
+        background: String(selectedElement.styles?.background || ''),
+        color: String(selectedElement.styles?.color || ''),
+        fontSize: String(selectedElement.styles?.fontSize || ''),
+        fontWeight: String(selectedElement.styles?.fontWeight || ''),
+        borderRadius: String(selectedElement.styles?.borderRadius || ''),
+        padding: String(selectedElement.styles?.padding || ''),
+        borderWidth: String(selectedElement.styles?.borderWidth || ''),
+        borderColor: String(selectedElement.styles?.borderColor || ''),
+        borderStyle: String(selectedElement.styles?.borderStyle || ''),
+        boxShadow: String(selectedElement.styles?.boxShadow || ''),
+        opacity: String(selectedElement.styles?.opacity || ''),
+        text: String(selectedElement.props?.text || '')
       })
     }
   }, [selectedElement])
 
-  const handleUpdate = (field: string, value: any, isStyle: boolean = false) => {
+  const handleUpdate = (field: string, value: string | number, isStyle: boolean = false) => {
     if (!selectedElement) return
 
     if (isStyle) {
@@ -102,7 +115,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
 
   const handleZIndexChange = (direction: 'front' | 'back') => {
     if (!selectedElement) return
-    
+
     if (direction === 'front') {
       bringToFront(selectedElement.id)
       showToast('已置顶', 'info')
@@ -110,6 +123,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
       sendToBack(selectedElement.id)
       showToast('已置底', 'info')
     }
+  }
+
+  const handleSaveAsComponent = () => {
+    if (!selectedElement) return
+
+    const savedComponents = JSON.parse(localStorage.getItem('custom_components') || '[]')
+    const newComponent = {
+      id: `custom-${Date.now()}`,
+      name: `自定义 ${selectedElement.type} ${savedComponents.length + 1}`,
+      type: selectedElement.type,
+      category: 'custom',
+      defaultSize: { width: selectedElement.width, height: selectedElement.height },
+      defaultStyles: selectedElement.styles || {},
+      defaultProps: selectedElement.props || {},
+    }
+
+    savedComponents.push(newComponent)
+    localStorage.setItem('custom_components', JSON.stringify(savedComponents))
+    showToast('已保存为自定义组件', 'success')
   }
 
   // 颜色选择器
@@ -204,6 +236,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
               <Copy size={14} />
             </button>
             <button
+              onClick={handleSaveAsComponent}
+              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+              title="保存为自定义组件"
+            >
+              <Bookmark size={14} />
+            </button>
+            <button
               onClick={handleDelete}
               className="p-1.5 hover:bg-red-900/50 text-red-400 rounded transition-colors"
               title="删除"
@@ -229,7 +268,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as 'style' | 'props' | 'layout')}
               className={cn(
                 'flex-1 flex items-center justify-center space-x-1 p-2 text-xs',
                 'transition-colors border-b-2',
@@ -247,18 +286,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* 样式面板 */}
+        {/* Style panel */}
         {activeTab === 'style' && (
           <>
             <div className="space-y-3">
               <div className="text-xs font-semibold text-gray-300">颜色</div>
-              <ColorInput 
-                label="背景颜色" 
+              <ColorInput
+                label="背景颜色"
                 value={formData.background}
                 onChange={(v) => handleUpdate('background', v, true)}
               />
-              <ColorInput 
-                label="文字颜色" 
+              <ColorInput
+                label="文字颜色"
                 value={formData.color}
                 onChange={(v) => handleUpdate('color', v, true)}
               />
@@ -266,17 +305,22 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
 
             <div className="space-y-3">
               <div className="text-xs font-semibold text-gray-300">排版</div>
-              <TextInput 
+              <TextInput
                 label="字体大小"
                 value={formData.fontSize}
                 onChange={(v) => handleUpdate('fontSize', v, true)}
               />
-              <TextInput 
+              <TextInput
+                label="字体粗细"
+                value={formData.fontWeight}
+                onChange={(v) => handleUpdate('fontWeight', v, true)}
+              />
+              <TextInput
                 label="内边距"
                 value={formData.padding}
                 onChange={(v) => handleUpdate('padding', v, true)}
               />
-              <TextInput 
+              <TextInput
                 label="圆角"
                 value={formData.borderRadius}
                 onChange={(v) => handleUpdate('borderRadius', v, true)}
@@ -284,13 +328,74 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
             </div>
 
             <div className="space-y-3">
+              <div className="text-xs font-semibold text-gray-300">边框</div>
+              <TextInput
+                label="边框宽度"
+                value={formData.borderWidth}
+                onChange={(v) => handleUpdate('borderWidth', v, true)}
+              />
+              <ColorInput
+                label="边框颜色"
+                value={formData.borderColor}
+                onChange={(v) => handleUpdate('borderColor', v, true)}
+              />
+              <TextInput
+                label="边框样式"
+                value={formData.borderStyle}
+                onChange={(v) => handleUpdate('borderStyle', v, true)}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-gray-300">效果</div>
+              <TextInput
+                label="阴影"
+                value={formData.boxShadow}
+                onChange={(v) => handleUpdate('boxShadow', v, true)}
+              />
+              <TextInput
+                label="透明度"
+                value={formData.opacity}
+                onChange={(v) => handleUpdate('opacity', v, true)}
+              />
+            </div>
+
+            <div className="space-y-3">
               <div className="text-xs font-semibold text-gray-300">文本内容</div>
-              <TextInput 
+              <TextInput
                 label="显示文本"
                 value={formData.text}
                 onChange={(v) => handleUpdate('text', v, false)}
               />
             </div>
+
+            {/* 图片 src 编辑 */}
+            {selectedElement.type === 'image' && (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-300">图片</div>
+                <TextInput
+                  label="图片地址 (src)"
+                  value={String(selectedElement.props?.src || '')}
+                  onChange={(v) => {
+                    const newProps = { ...selectedElement.props, src: v }
+                    updateElement(selectedElement.id, { props: newProps })
+                  }}
+                />
+                {selectedElement.props?.src ? (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-gray-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={String(selectedElement.props.src)}
+                      alt="预览"
+                      className="w-full h-32 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            )}
           </>
         )}
 

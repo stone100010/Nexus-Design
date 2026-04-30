@@ -1,42 +1,97 @@
 'use client'
 
-import { Maximize2, Minimize2, Move, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import React, { useEffect,useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
+import { EditorElement } from '@/types'
+
+// Memoized element renderer to avoid unnecessary re-renders
+const CanvasElement = React.memo<{
+  element: EditorElement
+  isSelected: boolean
+  onMouseDown: (e: React.MouseEvent, element: EditorElement) => void
+}>(({ element, isSelected, onMouseDown }) => {
+  return (
+    <div
+      className={cn(
+        'absolute cursor-move transition-all',
+        isSelected && 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900'
+      )}
+      style={{
+        left: element.x,
+        top: element.y,
+        width: element.width,
+        height: element.height,
+        ...(element.styles || {})
+      }}
+      onMouseDown={(e) => onMouseDown(e, element)}
+    >
+      {element.type === 'button' && (
+        <button
+          className="w-full h-full flex items-center justify-center"
+          style={element.styles as React.CSSProperties}
+        >
+          {String(element.props?.text || '按钮')}
+        </button>
+      )}
+
+      {element.type === 'text' && (
+        <div
+          className="w-full h-full flex items-center"
+          style={element.styles as React.CSSProperties}
+        >
+          {String(element.props?.text || '文本')}
+        </div>
+      )}
+
+      {element.type === 'container' && (
+        <div
+          className="w-full h-full border border-gray-600 bg-gray-800/50"
+          style={element.styles as React.CSSProperties}
+        >
+          {String(element.props?.children || '')}
+        </div>
+      )}
+
+      {isSelected && (
+        <div className="absolute -inset-1 border-2 border-blue-500 pointer-events-none" />
+      )}
+    </div>
+  )
+})
+CanvasElement.displayName = 'CanvasElement'
 
 interface CanvasProps {
-  projectId?: string
   className?: string
-  onElementAdd?: (element: any) => void
+  onElementAdd?: (element: EditorElement) => void
 }
 
-export const Canvas: React.FC<CanvasProps> = ({ 
-  projectId,
+export const Canvas: React.FC<CanvasProps> = ({
   className,
-  onElementAdd 
+  onElementAdd
 }) => {
   const {
     elements,
     selectedElementIds,
     canvas,
     addElement,
-    updateElement,
     selectElement,
     clearSelection,
-    setZoom,
-    setCanvasSize
+    setZoom
   } = useEditorStore()
 
   const { showToast } = useUIStore()
-  
+  const router = useRouter()
+
   const canvasRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [canvasPosition, setCanvasPosition] = useState({ x: 0, y: 0 })
-  const [selectedElement, setSelectedElement] = useState<any>(null)
+  const [selectedElement, setSelectedElement] = useState<EditorElement | null>(null)
 
   // 画布背景网格
   const gridSize = 20
@@ -87,7 +142,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }
 
   // 处理元素拖拽
-  const handleElementMouseDown = (e: React.MouseEvent, element: any) => {
+  const handleElementMouseDown = (e: React.MouseEvent, element: EditorElement) => {
     e.stopPropagation()
     
     selectElement(element.id)
@@ -102,14 +157,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !selectedElement) return
-
-    const newX = (e.clientX - dragStart.x - canvasPosition.x) / canvas.zoom
-    const newY = (e.clientY - dragStart.y - canvasPosition.y) / canvas.zoom
-
-    updateElement(selectedElement.id, { x: newX, y: newY })
-  }
 
   const handleMouseUp = () => {
     setIsDragging(false)
@@ -189,8 +236,55 @@ export const Canvas: React.FC<CanvasProps> = ({
     setZoom(1)
   }
 
+  // Mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      const newZoom = Math.max(0.1, Math.min(3, canvas.zoom + delta))
+      setZoom(newZoom)
+    }
+  }
+
+  // Drag-and-drop from component library
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/nexus-component')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const data = e.dataTransfer.getData('application/nexus-component')
+    if (!data) return
+
+    try {
+      const component = JSON.parse(data)
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const x = Math.max(0, (e.clientX - rect.left - canvasPosition.x) / canvas.zoom - component.defaultSize.width / 2)
+      const y = Math.max(0, (e.clientY - rect.top - canvasPosition.y) / canvas.zoom - component.defaultSize.height / 2)
+
+      addElement({
+        type: component.type,
+        x: Math.round(x / gridSize) * gridSize,
+        y: Math.round(y / gridSize) * gridSize,
+        width: component.defaultSize.width,
+        height: component.defaultSize.height,
+        styles: component.defaultStyles || {},
+        props: component.defaultProps || {},
+      })
+
+      showToast(`已添加 ${component.name}`, 'success')
+    } catch {
+      // ignore parse errors
+    }
+  }
+
   return (
-    <div 
+    <div
       className={cn(
         'relative h-full bg-gray-900 overflow-hidden',
         className
@@ -200,9 +294,28 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleCanvasDragMove}
       onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
+      {/* 标尺 */}
+      <div className="absolute top-0 left-0 right-0 h-6 bg-gray-800/80 border-b border-gray-700 z-10 flex items-end overflow-hidden">
+        {Array.from({ length: Math.ceil(canvas.width / 50) }, (_, i) => (
+          <div key={i} className="flex-shrink-0" style={{ width: 50 * canvas.zoom }}>
+            <span className="text-[9px] text-gray-500 ml-0.5">{i * 50}</span>
+          </div>
+        ))}
+      </div>
+      <div className="absolute top-6 left-0 bottom-0 w-6 bg-gray-800/80 border-r border-gray-700 z-10 flex flex-col overflow-hidden">
+        {Array.from({ length: Math.ceil(canvas.height / 50) }, (_, i) => (
+          <div key={i} className="flex-shrink-0 flex items-start" style={{ height: 50 * canvas.zoom }}>
+            <span className="text-[9px] text-gray-500 ml-0.5 mt-0.5">{i * 50}</span>
+          </div>
+        ))}
+      </div>
+
       {/* 画布工具栏 */}
-      <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2">
+      <div className="absolute top-4 left-10 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2">
         <button
           onClick={handleZoomOut}
           className="p-1.5 hover:bg-gray-700 rounded transition-colors"
@@ -281,60 +394,14 @@ export const Canvas: React.FC<CanvasProps> = ({
         />
 
         {/* 渲染元素 */}
-        {elements.map((element) => {
-          const isSelected = selectedElementIds.includes(element.id)
-          
-          return (
-            <div
-              key={element.id}
-              className={cn(
-                'absolute cursor-move transition-all',
-                isSelected && 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900'
-              )}
-              style={{
-                left: element.x,
-                top: element.y,
-                width: element.width,
-                height: element.height,
-                ...(element.styles || {})
-              }}
-              onMouseDown={(e) => handleElementMouseDown(e, element)}
-            >
-              {/* 元素内容 */}
-              {element.type === 'button' && (
-                <button
-                  className="w-full h-full flex items-center justify-center"
-                  style={element.styles}
-                >
-                  {element.props?.text || '按钮'}
-                </button>
-              )}
-
-              {element.type === 'text' && (
-                <div
-                  className="w-full h-full flex items-center"
-                  style={element.styles}
-                >
-                  {element.props?.text || '文本'}
-                </div>
-              )}
-
-              {element.type === 'container' && (
-                <div
-                  className="w-full h-full border border-gray-600 bg-gray-800/50"
-                  style={element.styles}
-                >
-                  {element.props?.children}
-                </div>
-              )}
-
-              {/* 选中状态指示器 */}
-              {isSelected && (
-                <div className="absolute -inset-1 border-2 border-blue-500 pointer-events-none" />
-              )}
-            </div>
-          )
-        })}
+        {elements.map((element) => (
+          <CanvasElement
+            key={element.id}
+            element={element}
+            isSelected={selectedElementIds.includes(element.id)}
+            onMouseDown={handleElementMouseDown}
+          />
+        ))}
 
         {/* 空状态提示 */}
         {elements.length === 0 && (
@@ -343,6 +410,13 @@ export const Canvas: React.FC<CanvasProps> = ({
               <div className="text-4xl mb-2">🎨</div>
               <div className="text-sm">双击画布添加元素</div>
               <div className="text-xs text-gray-600 mt-1">或从左侧组件库拖拽</div>
+              <button
+                onClick={() => router.push('/design/ai')}
+                className="pointer-events-auto mt-4 flex items-center space-x-2 mx-auto px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 rounded-lg text-purple-400 text-xs transition-colors"
+              >
+                <Sparkles size={14} />
+                <span>从 AI 生成</span>
+              </button>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { generateId } from '@/lib/utils'
+import { useUIStore } from '@/stores/ui'
 import { EditorElement, EditorHistory,EditorState } from '@/types'
 
 interface EditorStore extends EditorState {
@@ -48,9 +49,20 @@ interface EditorStore extends EditorState {
   // Import/Export
   importState: (state: Partial<EditorState>) => void
   exportState: () => EditorState
+
+  // Theme
+  theme: 'dark' | 'light'
+  setTheme: (theme: 'dark' | 'light') => void
+
+  // Alignment
+  alignElements: (alignment: 'left' | 'right' | 'top' | 'bottom' | 'center-h' | 'center-v') => void
+
+  // Version management
+  saveVersion: (description?: string) => Promise<void>
+  loadVersion: (projectId: string, versionId: string) => Promise<void>
 }
 
-const initialState: EditorState = {
+const initialState: EditorState & { theme: 'dark' | 'light' } = {
   elements: [],
   selectedElementIds: [],
   canvas: {
@@ -63,6 +75,7 @@ const initialState: EditorState = {
   history: [],
   historyIndex: -1,
   isSaving: false,
+  theme: 'dark',
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -334,7 +347,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   // Project operations
   saveProject: async (name = 'draft') => {
     set({ isSaving: true })
-    
+    const toast = useUIStore.getState().showToast
+
     try {
       const state = get()
       const projectData = {
@@ -345,9 +359,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
       // 优先保存到数据库
       try {
-        // 检查是否有现有项目ID存储在localStorage中
         const existingProjectId = localStorage.getItem('currentProjectId')
-        
+
         const response = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -360,23 +373,24 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         })
 
         const result = await response.json()
-        
+
         if (result.success && result.data?.id) {
-          // 保存项目ID到localStorage
           localStorage.setItem('currentProjectId', result.data.id)
-          
-          // 也保存到localStorage作为备份
           localStorage.setItem(`project_${name}`, JSON.stringify(projectData))
+          toast('已保存到云端', 'success')
           return
         }
-      } catch (error) {
-        console.error('保存到数据库失败，使用本地存储:', error)
+      } catch {
+        // 数据库保存失败，降级到本地存储
       }
 
       // 降级：保存到 localStorage
       if (typeof window !== 'undefined') {
         localStorage.setItem(`project_${name}`, JSON.stringify(projectData))
       }
+      toast('云端保存失败，已暂存本地', 'warning')
+    } catch {
+      toast('保存失败', 'error')
     } finally {
       set({ isSaving: false })
     }
@@ -387,14 +401,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     try {
       const response = await fetch('/api/projects')
       const result = await response.json()
-      
+
       if (result.success && result.data?.length > 0) {
-        // 使用最新的项目
         const latestProject = result.data[0]
         if (latestProject.data) {
-          // 保存项目ID
           localStorage.setItem('currentProjectId', latestProject.id)
-          
+
           set({
             elements: latestProject.data.elements || [],
             canvas: latestProject.data.canvas || initialState.canvas,
@@ -404,8 +416,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           return
         }
       }
-    } catch (error) {
-      console.error('从数据库加载失败，尝试本地存储:', error)
+    } catch {
+      // 从数据库加载失败，尝试本地存储
     }
 
     // 降级：从 localStorage 加载
@@ -423,10 +435,144 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       }
     }
 
-    throw new Error('未找到保存的项目')
+    useUIStore.getState().showToast('未找到保存的项目', 'warning')
   },
 
   setSaving: (isSaving) => {
     set({ isSaving })
+  },
+
+  // Theme
+  theme: 'dark',
+  setTheme: (theme) => {
+    set({ theme })
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.classList.toggle('light', theme === 'light')
+  },
+
+  // Alignment
+  alignElements: (alignment) => {
+    const state = get()
+    const selected = state.elements.filter((el) =>
+      state.selectedElementIds.includes(el.id)
+    )
+    if (selected.length < 2) return
+
+    let updates: Record<string, number>
+
+    switch (alignment) {
+      case 'left': {
+        const minX = Math.min(...selected.map((el) => el.x))
+        updates = { x: minX }
+        break
+      }
+      case 'right': {
+        const maxRight = Math.max(...selected.map((el) => el.x + el.width))
+        selected.forEach((el) => {
+          get().updateElement(el.id, { x: maxRight - el.width })
+        })
+        get().saveHistory('Align Right')
+        return
+      }
+      case 'top': {
+        const minY = Math.min(...selected.map((el) => el.y))
+        updates = { y: minY }
+        break
+      }
+      case 'bottom': {
+        const maxBottom = Math.max(...selected.map((el) => el.y + el.height))
+        selected.forEach((el) => {
+          get().updateElement(el.id, { y: maxBottom - el.height })
+        })
+        get().saveHistory('Align Bottom')
+        return
+      }
+      case 'center-h': {
+        const minX = Math.min(...selected.map((el) => el.x))
+        const maxRight = Math.max(...selected.map((el) => el.x + el.width))
+        const centerX = (minX + maxRight) / 2
+        selected.forEach((el) => {
+          get().updateElement(el.id, { x: centerX - el.width / 2 })
+        })
+        get().saveHistory('Align Center Horizontal')
+        return
+      }
+      case 'center-v': {
+        const minY = Math.min(...selected.map((el) => el.y))
+        const maxBottom = Math.max(...selected.map((el) => el.y + el.height))
+        const centerY = (minY + maxBottom) / 2
+        selected.forEach((el) => {
+          get().updateElement(el.id, { y: centerY - el.height / 2 })
+        })
+        get().saveHistory('Align Center Vertical')
+        return
+      }
+      default:
+        return
+    }
+
+    selected.forEach((el) => {
+      get().updateElement(el.id, updates)
+    })
+    get().saveHistory(`Align ${alignment}`)
+  },
+
+  // Version management
+  saveVersion: async (description) => {
+    const state = get()
+    const toast = useUIStore.getState().showToast
+    const projectId = typeof window !== 'undefined' ? localStorage.getItem('currentProjectId') : null
+
+    if (!projectId) {
+      toast('请先保存项目', 'warning')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: description || `版本保存 - ${new Date().toLocaleString('zh-CN')}`,
+          data: {
+            elements: state.elements,
+            canvas: state.canvas,
+          },
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        toast('版本已保存', 'success')
+      } else {
+        toast(result.error || '版本保存失败', 'error')
+      }
+    } catch {
+      toast('版本保存失败', 'error')
+    }
+  },
+
+  loadVersion: async (projectId, versionId) => {
+    const toast = useUIStore.getState().showToast
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/versions/${versionId}`)
+      const result = await response.json()
+
+      if (result.success && result.data?.data) {
+        const versionData = result.data.data
+        set({
+          elements: versionData.elements || [],
+          canvas: versionData.canvas || initialState.canvas,
+          selectedElementIds: [],
+        })
+        get().saveHistory('Load Version')
+        toast('版本已加载', 'success')
+      } else {
+        toast('版本加载失败', 'error')
+      }
+    } catch {
+      toast('版本加载失败', 'error')
+    }
   },
 }))

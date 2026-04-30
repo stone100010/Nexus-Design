@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import OpenAI from 'openai'
 
+import { handleApiError } from '@/lib/api-error'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
@@ -89,6 +90,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 每用户每日生成限制
+    const dailyLimit = parseInt(process.env.AI_DAILY_LIMIT || '50')
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    const todayCount = await prisma.aIGeneration.count({
+      where: {
+        userId: user.id,
+        createdAt: { gte: todayStart },
+        status: 'SUCCESS'
+      }
+    })
+
+    if (todayCount >= dailyLimit) {
+      return NextResponse.json(
+        { success: false, error: `今日生成次数已达上限（${dailyLimit} 次），请明天再试` },
+        { status: 429 }
+      )
+    }
+
     // 调用 OpenAI API
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL || 'deepseek-v3.2',
@@ -110,7 +131,7 @@ export async function POST(request: NextRequest) {
     let designData
     try {
       designData = JSON.parse(responseContent)
-    } catch (parseError) {
+    } catch {
       throw new Error('AI 响应格式无效')
     }
 
@@ -148,13 +169,13 @@ export async function POST(request: NextRequest) {
         metadata: {
           tokensUsed,
           cost,
-          generationId: generation.id
+          generationId: generation.id,
+          dailyRemaining: dailyLimit - todayCount - 1,
+          dailyLimit
         }
       }
     })
   } catch (error) {
-    console.error('AI 生成错误:', error)
-
     // 记录失败的生成
     try {
       const session = await getServerSession(authOptions)
@@ -162,7 +183,7 @@ export async function POST(request: NextRequest) {
         const user = await prisma.user.findUnique({
           where: { email: session.user.email }
         })
-        
+
         if (user) {
           await prisma.aIGeneration.create({
             data: {
@@ -179,18 +200,11 @@ export async function POST(request: NextRequest) {
           })
         }
       }
-    } catch (dbError) {
-      console.error('保存失败记录错误:', dbError)
+    } catch {
+      // 静默处理数据库记录失败
     }
 
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'AI 生成失败',
-        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
-      },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -258,12 +272,6 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : '获取历史失败' 
-      },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

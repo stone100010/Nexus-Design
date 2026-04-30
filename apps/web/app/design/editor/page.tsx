@@ -1,45 +1,62 @@
 'use client'
 
-import { 
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   ArrowLeft,
-  Download, 
-  History, 
-  Play, 
-  Save, 
+  BookOpen,
+  Download,
+  History,
+  Moon,
+  Play,
+  Save,
   Settings as SettingsIcon,
+  Sun,
   Trash2,
-  Users,
   Zap} from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { useSession, SessionProvider } from 'next-auth/react'
-import { ThemeProvider } from 'next-themes'
-import React, { useEffect,useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useEffect,useState } from 'react'
 
-import { Canvas } from '@/components/editor/canvas'
-import { ComponentLibrary } from '@/components/editor/component-library'
-import { PropertiesPanel } from '@/components/editor/properties-panel'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
 
+// Dynamic imports for code splitting
+const Canvas = dynamic(() => import('@/components/editor/canvas'), { ssr: false })
+const ComponentLibrary = dynamic(() => import('@/components/editor/component-library'), { ssr: false })
+const PropertiesPanel = dynamic(() => import('@/components/editor/properties-panel'), { ssr: false })
+
 function DesignEditorContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const { 
-    elements, 
-    saveProject, 
-    loadProject, 
+  const {
+    elements,
+    saveProject,
+    loadProject,
     clearCanvas,
     undo,
     redo,
     canUndo,
     canRedo,
     isSaving,
-    history
+    history,
+    selectedElementIds,
+    alignElements,
+    theme,
+    setTheme,
+    saveVersion,
   } = useEditorStore()
-  
+
   const { showToast } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showCodePreview, setShowCodePreview] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState('')
+  const [showVersionHistory, setShowVersionHistory] = useState(false)
+  const [versions, setVersions] = useState<Record<string, unknown>[]>([])
+  const [exportFormat, setExportFormat] = useState<'react' | 'vue' | 'html'>('react')
 
   // 检查认证状态
   useEffect(() => {
@@ -63,7 +80,7 @@ function DesignEditorContent() {
     try {
       await saveProject('manual')
       showToast('项目已保存', 'success')
-    } catch (error) {
+    } catch {
       showToast('保存失败', 'error')
     }
   }
@@ -97,22 +114,40 @@ function DesignEditorContent() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUndo, canRedo, undo, redo, showToast])
 
   const handleExport = () => {
-    // 生成 React 代码
-    const reactCode = generateReactCode()
-    
-    // 创建下载链接
-    const blob = new Blob([reactCode], { type: 'text/plain' })
+    let code: string
+    switch (exportFormat) {
+      case 'vue':
+        code = generateVueCode()
+        break
+      case 'html':
+        code = generateHtmlCode()
+        break
+      default:
+        code = generateReactCode()
+    }
+    setGeneratedCode(code)
+    setShowCodePreview(true)
+  }
+
+  const handleDownloadCode = () => {
+    const blob = new Blob([generatedCode], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = 'design-component.tsx'
     a.click()
     URL.revokeObjectURL(url)
-    
+    setShowCodePreview(false)
     showToast('代码已导出', 'success')
+  }
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(generatedCode)
+    showToast('代码已复制到剪贴板', 'success')
   }
 
   const handleAI = () => {
@@ -127,49 +162,180 @@ function DesignEditorContent() {
     }
   }
 
+  // Version management
+  const handleSaveVersion = async () => {
+    await saveVersion()
+  }
+
+  const handleLoadVersions = async () => {
+    const projectId = localStorage.getItem('currentProjectId')
+    if (!projectId) {
+      showToast('请先保存项目', 'warning')
+      return
+    }
+    try {
+      const response = await fetch(`/api/projects/${projectId}/versions`)
+      const result = await response.json()
+      if (result.success) {
+        setVersions(result.data || [])
+        setShowVersionHistory(true)
+      }
+    } catch {
+      showToast('加载版本历史失败', 'error')
+    }
+  }
+
+  const handleLoadVersion = async (versionId: string) => {
+    const projectId = localStorage.getItem('currentProjectId')
+    if (!projectId) return
+    const { loadVersion } = useEditorStore.getState()
+    await loadVersion(projectId, versionId)
+    setShowVersionHistory(false)
+  }
+
+  // Alignment
+  const handleAlign = (direction: 'left' | 'right' | 'center-h' | 'center-v') => {
+    if (selectedElementIds.length < 2) {
+      showToast('请选择至少 2 个元素', 'warning')
+      return
+    }
+    alignElements(direction)
+  }
+
+  // Theme toggle
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
   const handleLoad = async () => {
     try {
       await loadProject('draft')
       showToast('项目已加载', 'success')
-    } catch (error) {
+    } catch {
       showToast('加载失败', 'error')
     }
   }
 
   const generateReactCode = () => {
-    const code = `import React from 'react'
+    const elementCode = elements.map(el => {
+      const posStyle = `left: ${el.x}px, top: ${el.y}px, width: ${el.width}px, height: ${el.height}px`
+      const styleProps = Object.entries(el.styles || {})
+        .map(([k, v]) => `${k}: '${v}'`)
+        .join(', ')
+
+      if (el.type === 'button') {
+        return `      <button
+        style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
+        className="rounded-md font-medium transition-colors hover:opacity-90"
+      >
+        ${el.props?.text || '按钮'}
+      </button>`
+      } else if (el.type === 'text') {
+        return `      <div
+        style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
+      >
+        ${el.props?.text || '文本'}
+      </div>`
+      } else if (el.type === 'input') {
+        return `      <input
+        placeholder="${el.props?.placeholder || '请输入...'}"
+        style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
+        className="rounded-md border px-3 py-2"
+      />`
+      } else {
+        return `      <div
+        style={{ position: 'absolute', ${posStyle}, ${styleProps} }}
+        className="rounded-md"
+      >
+        ${el.props?.children || ''}
+      </div>`
+      }
+    }).join('\n\n')
+
+    return `import React from 'react'
 
 export default function GeneratedComponent() {
   return (
-    <div style={{ 
-      position: 'relative', 
-      width: '100%', 
-      height: '100%',
-      background: '#111827'
-    }}>
-      ${elements.map(el => {
-        const style = {
-          position: 'absolute',
-          left: el.x + 'px',
-          top: el.y + 'px',
-          width: el.width + 'px',
-          height: el.height + 'px',
-          ...el.styles
-        }
-        
-        if (el.type === 'button') {
-          return `<button style={${JSON.stringify(style, null, 2)}}>${el.props?.text || '按钮'}</button>`
-        } else if (el.type === 'text') {
-          return `<div style={${JSON.stringify(style, null, 2)}}>${el.props?.text || '文本'}</div>`
-        } else {
-          return `<div style={${JSON.stringify(style, null, 2)}}>${el.props?.children || ''}</div>`
-        }
-      }).join('\n      ')}
+    <div className="relative w-full min-h-screen bg-gray-900">
+${elementCode}
     </div>
   )
 }
 `
-    return code
+  }
+
+  const generateVueCode = () => {
+    const elementCode = elements.map(el => {
+      const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
+
+      if (el.type === 'button') {
+        return `    <button style="${style}" class="rounded-md font-medium">${el.props?.text || '按钮'}</button>`
+      } else if (el.type === 'text') {
+        return `    <div style="${style}">${el.props?.text || '文本'}</div>`
+      } else if (el.type === 'input') {
+        return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" class="rounded-md border px-3 py-2" />`
+      } else {
+        return `    <div style="${style}" class="rounded-md">${el.props?.children || ''}</div>`
+      }
+    }).join('\n')
+
+    return `<template>
+  <div class="design-container">
+${elementCode}
+  </div>
+</template>
+
+<script setup lang="ts">
+// Generated by Nexus Design
+</script>
+
+<style scoped>
+.design-container {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background: #111827;
+}
+</style>
+`
+  }
+
+  const generateHtmlCode = () => {
+    const elementCode = elements.map(el => {
+      const style = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.width}px;height:${el.height}px;${Object.entries(el.styles || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';')}`
+
+      if (el.type === 'button') {
+        return `    <button style="${style}">${el.props?.text || '按钮'}</button>`
+      } else if (el.type === 'text') {
+        return `    <div style="${style}">${el.props?.text || '文本'}</div>`
+      } else if (el.type === 'input') {
+        return `    <input placeholder="${el.props?.placeholder || '请输入...'}" style="${style}" />`
+      } else {
+        return `    <div style="${style}">${el.props?.children || ''}</div>`
+      }
+    }).join('\n')
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generated Design</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .design-container { position: relative; width: 100%; min-height: 100vh; background: #111827; }
+    button { cursor: pointer; border: none; }
+    input { outline: none; }
+  </style>
+</head>
+<body>
+  <div class="design-container">
+${elementCode}
+  </div>
+</body>
+</html>
+`
   }
 
   if (status === 'loading') {
@@ -205,6 +371,11 @@ export default function GeneratedComponent() {
             <span>元素: {elements.length}</span>
             <span>·</span>
             <span>历史: {history.length}</span>
+            <span>·</span>
+            <span className={`flex items-center space-x-1 ${isSaving ? 'text-yellow-400' : 'text-green-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
+              <span>{isSaving ? '保存中...' : '已保存'}</span>
+            </span>
           </div>
         </div>
 
@@ -235,6 +406,61 @@ export default function GeneratedComponent() {
             <Zap size={14} />
             <span>AI 生成</span>
           </button>
+
+          {/* 对齐工具 */}
+          {selectedElementIds.length >= 2 && (
+            <div className="flex items-center space-x-1 border-l border-gray-600 pl-2 ml-2">
+              <button onClick={() => handleAlign('left')} className="p-1.5 hover:bg-gray-700 rounded" title="左对齐">
+                <AlignLeft size={14} />
+              </button>
+              <button onClick={() => handleAlign('center-h')} className="p-1.5 hover:bg-gray-700 rounded" title="水平居中">
+                <AlignCenter size={14} />
+              </button>
+              <button onClick={() => handleAlign('right')} className="p-1.5 hover:bg-gray-700 rounded" title="右对齐">
+                <AlignRight size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* 保存版本 */}
+          <button
+            onClick={handleSaveVersion}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded text-xs transition-colors"
+            title="保存版本"
+          >
+            <BookOpen size={14} />
+            <span>版本</span>
+          </button>
+
+          {/* 版本历史 */}
+          <button
+            onClick={handleLoadVersions}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+            title="版本历史"
+          >
+            <History size={14} />
+            <span>历史</span>
+          </button>
+
+          {/* 主题切换 */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 hover:bg-gray-700 rounded transition-colors"
+            title={theme === 'dark' ? '切换亮色' : '切换暗色'}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
+          {/* 导出格式选择 */}
+          <select
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as 'react' | 'vue' | 'html')}
+            className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-xs text-gray-200 focus:outline-none"
+          >
+            <option value="react">React TSX</option>
+            <option value="vue">Vue SFC</option>
+            <option value="html">HTML/CSS</option>
+          </select>
 
           {/* 导出 */}
           <button
@@ -343,12 +569,89 @@ export default function GeneratedComponent() {
         </div>
       )}
 
+      {/* 版本历史侧边栏 */}
+      {showVersionHistory && (
+        <div className="absolute top-14 right-0 bottom-0 w-80 bg-gray-800/95 backdrop-blur border-l border-gray-700 z-40 flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-200">版本历史</h3>
+            <button
+              onClick={() => setShowVersionHistory(false)}
+              className="text-gray-400 hover:text-gray-200"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {versions.length === 0 ? (
+              <div className="text-center text-gray-500 text-sm py-8">
+                暂无版本记录
+              </div>
+            ) : (
+              versions.map((version) => (
+                <button
+                  key={String(version.id)}
+                  onClick={() => handleLoadVersion(String(version.id))}
+                  className="w-full text-left p-3 rounded-lg bg-gray-700/50 hover:bg-gray-700 border border-transparent hover:border-gray-600 transition-all"
+                >
+                  <div className="text-sm text-gray-200 font-medium">
+                    {String(version.description || `版本 ${version.version}`)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(String(version.createdAt)).toLocaleString('zh-CN')}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 保存状态提示 */}
       {isSaving && (
         <div className="absolute top-20 right-4 bg-blue-600/90 backdrop-blur text-white text-xs px-3 py-2 rounded-lg shadow-lg animate-pulse">
           保存中...
         </div>
       )}
+
+      {/* Code Preview Modal */}
+      {showCodePreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-3xl max-h-[80vh] bg-gray-800 rounded-lg border border-gray-700 shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-200">代码预览</h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleCopyCode}
+                  className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                >
+                  复制代码
+                </button>
+                <button
+                  onClick={handleDownloadCode}
+                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                >
+                  下载文件
+                </button>
+                <button
+                  onClick={() => setShowCodePreview(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-200 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap bg-gray-900 rounded p-4">
+                {generatedCode}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+export default function EditorPage() {
+  return <DesignEditorContent />
 }
