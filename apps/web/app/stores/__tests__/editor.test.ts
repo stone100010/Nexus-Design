@@ -5,7 +5,8 @@ import { useEditorStore } from '../editor'
 describe('useEditorStore', () => {
   beforeEach(() => {
     useEditorStore.setState({
-      elements: [],
+      pages: [],
+      activePageId: '',
       selectedElementIds: [],
       canvas: { width: 375, height: 812, zoom: 1, x: 0, y: 0 },
       history: [],
@@ -13,6 +14,8 @@ describe('useEditorStore', () => {
       isSaving: false,
     })
   })
+
+  const getElements = () => useEditorStore.getState().getActivePage()?.elements ?? []
 
   describe('addElement', () => {
     it('adds an element with generated id', () => {
@@ -26,7 +29,7 @@ describe('useEditorStore', () => {
         styles: { background: '#000' },
       })
 
-      const elements = useEditorStore.getState().elements
+      const elements = getElements()
       expect(elements).toHaveLength(1)
       expect(elements[0].id).toBe(id)
       expect(elements[0].type).toBe('button')
@@ -48,7 +51,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().updateElement(id, { x: 50, y: 100 })
 
-      const element = useEditorStore.getState().elements.find(el => el.id === id)
+      const element = getElements().find(el => el.id === id)
       expect(element?.x).toBe(50)
       expect(element?.y).toBe(100)
     })
@@ -68,7 +71,7 @@ describe('useEditorStore', () => {
         styles: { background: '#fff', color: '#000' },
       })
 
-      const element = useEditorStore.getState().elements.find(el => el.id === id)
+      const element = getElements().find(el => el.id === id)
       expect(element?.styles).toEqual({ background: '#fff', color: '#000' })
     })
   })
@@ -87,7 +90,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().deleteElement(id)
 
-      expect(useEditorStore.getState().elements).toHaveLength(0)
+      expect(getElements()).toHaveLength(0)
     })
 
     it('removes element from selection', () => {
@@ -146,8 +149,7 @@ describe('useEditorStore', () => {
         type: 'button', x: 0, y: 0, width: 100, height: 40, props: {}, styles: {},
       })
 
-      expect(useEditorStore.getState().elements).toHaveLength(1)
-      // After first action, history has 1 entry at index 0
+      expect(getElements()).toHaveLength(1)
       expect(useEditorStore.getState().history.length).toBeGreaterThanOrEqual(1)
     })
 
@@ -159,11 +161,11 @@ describe('useEditorStore', () => {
         type: 'text', x: 0, y: 0, width: 100, height: 40, props: {}, styles: {},
       })
 
-      expect(useEditorStore.getState().elements).toHaveLength(2)
+      expect(getElements()).toHaveLength(2)
       expect(useEditorStore.getState().canUndo()).toBe(true)
 
       useEditorStore.getState().undo()
-      expect(useEditorStore.getState().elements).toHaveLength(1)
+      expect(getElements()).toHaveLength(1)
     })
 
     it('redoes an undone action', () => {
@@ -175,10 +177,10 @@ describe('useEditorStore', () => {
       })
 
       useEditorStore.getState().undo()
-      expect(useEditorStore.getState().elements).toHaveLength(1)
+      expect(getElements()).toHaveLength(1)
 
       useEditorStore.getState().redo()
-      expect(useEditorStore.getState().elements).toHaveLength(2)
+      expect(getElements()).toHaveLength(2)
     })
 
     it('cannot undo when no history', () => {
@@ -205,7 +207,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().clearCanvas()
 
-      expect(useEditorStore.getState().elements).toHaveLength(0)
+      expect(getElements()).toHaveLength(0)
       expect(useEditorStore.getState().selectedElementIds).toHaveLength(0)
     })
   })
@@ -219,7 +221,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().duplicateElement(id)
 
-      const elements = useEditorStore.getState().elements
+      const elements = getElements()
       expect(elements).toHaveLength(2)
 
       const copy = elements.find(el => el.id !== id)
@@ -239,7 +241,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().bringToFront(id1)
 
-      const elements = useEditorStore.getState().elements
+      const elements = getElements()
       expect(elements[elements.length - 1].id).toBe(id1)
     })
 
@@ -253,7 +255,7 @@ describe('useEditorStore', () => {
 
       useEditorStore.getState().sendToBack(id2)
 
-      const elements = useEditorStore.getState().elements
+      const elements = getElements()
       expect(elements[0].id).toBe(id2)
     })
   })
@@ -294,6 +296,61 @@ describe('useEditorStore', () => {
       useEditorStore.getState().setCanvasSize({ width: 1024, height: 768 })
       expect(useEditorStore.getState().canvas.width).toBe(1024)
       expect(useEditorStore.getState().canvas.height).toBe(768)
+    })
+  })
+
+  describe('page operations', () => {
+    it('setPages creates pages and sets first as active', () => {
+      const { setPages } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+        { id: 'p2', name: 'Page 2', canvas: { width: 375, height: 812 }, elements: [] },
+      ])
+
+      const state = useEditorStore.getState()
+      expect(state.pages).toHaveLength(2)
+      expect(state.activePageId).toBe('p1')
+    })
+
+    it('setActivePage switches page and syncs canvas', () => {
+      const { setPages, setActivePage } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+        { id: 'p2', name: 'Page 2', canvas: { width: 414, height: 896 }, elements: [] },
+      ])
+
+      setActivePage('p2')
+      const state = useEditorStore.getState()
+      expect(state.activePageId).toBe('p2')
+      expect(state.canvas.width).toBe(414)
+      expect(state.canvas.height).toBe(896)
+    })
+
+    it('removePage keeps at least 1 page', () => {
+      const { setPages, removePage } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+      ])
+
+      removePage('p1')
+      expect(useEditorStore.getState().pages).toHaveLength(1)
+    })
+
+    it('addElement targets active page', () => {
+      const { setPages, setActivePage, addElement } = useEditorStore.getState()
+      setPages([
+        { id: 'p1', name: 'Page 1', canvas: { width: 375, height: 812 }, elements: [] },
+        { id: 'p2', name: 'Page 2', canvas: { width: 375, height: 812 }, elements: [] },
+      ])
+
+      setActivePage('p1')
+      addElement({ type: 'text', x: 0, y: 0, width: 100, height: 20, props: {}, styles: {} })
+
+      setActivePage('p2')
+      expect(getElements()).toHaveLength(0)
+
+      setActivePage('p1')
+      expect(getElements()).toHaveLength(1)
     })
   })
 })
