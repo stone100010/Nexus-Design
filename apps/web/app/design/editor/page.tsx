@@ -138,7 +138,9 @@ function DesignEditorContent() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'design-component.tsx'
+    const ext = exportFormat === 'vue' ? 'vue' : exportFormat === 'html' ? 'html' : 'tsx'
+    const timestamp = new Date().toISOString().slice(0, 10)
+    a.download = `design-${timestamp}.${ext}`
     a.click()
     URL.revokeObjectURL(url)
     setShowCodePreview(false)
