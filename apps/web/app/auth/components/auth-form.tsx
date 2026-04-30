@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import { useState } from 'react'
+import React, { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,21 +12,51 @@ interface AuthFormProps {
   type: 'login' | 'register'
 }
 
+interface FieldErrors {
+  name?: string
+  email?: string
+  password?: string
+}
+
 export function AuthForm({ type }: AuthFormProps) {
   const router = useRouter()
   const { setToast } = useUIStore()
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
   })
   const [loading, setLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
   const isLogin = type === 'login'
 
+  const validateForm = (): boolean => {
+    const errors: FieldErrors = {}
+
+    if (!isLogin && formData.name.trim().length < 2) {
+      errors.name = '姓名至少需要 2 个字符'
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      errors.email = '请输入有效的邮箱地址'
+    }
+
+    if (formData.password.length < 6) {
+      errors.password = '密码至少需要 6 个字符'
+    }
+
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!validateForm()) return
+
     setLoading(true)
 
     try {
@@ -38,13 +68,12 @@ export function AuthForm({ type }: AuthFormProps) {
         })
 
         if (result?.error) {
-          setToast({ message: '登录失败，请检查您的凭据', type: 'error' })
+          setToast({ message: '邮箱或密码错误', type: 'error' })
         } else {
           setToast({ message: '登录成功！', type: 'success' })
           router.push('/workspace')
         }
       } else {
-        // 注册逻辑
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -56,11 +85,15 @@ export function AuthForm({ type }: AuthFormProps) {
           router.push('/auth/login')
         } else {
           const data = await response.json()
-          setToast({ message: data.error || '注册失败', type: 'error' })
+          if (data.error?.includes('already exists') || data.error?.includes('已被注册')) {
+            setToast({ message: '该邮箱已被注册', type: 'error' })
+          } else {
+            setToast({ message: data.error || '注册失败', type: 'error' })
+          }
         }
       }
-    } catch (error) {
-      setToast({ message: '发生错误，请稍后重试', type: 'error' })
+    } catch {
+      setToast({ message: '网络连接失败，请检查网络', type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -95,7 +128,7 @@ export function AuthForm({ type }: AuthFormProps) {
         setToast({ message: '演示账号登录成功！', type: 'success' })
         router.push('/workspace')
       }
-    } catch (error) {
+    } catch {
       setToast({ message: '演示登录失败', type: 'error' })
     } finally {
       setLoading(false)
@@ -125,11 +158,17 @@ export function AuthForm({ type }: AuthFormProps) {
                 required
                 className="w-full px-3 py-2 bg-dark/50 border border-primary/20 rounded-lg focus:outline-none focus:border-primary"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value })
+                  if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: undefined })
+                }}
               />
+              {fieldErrors.name && (
+                <p className="text-xs text-red-400 mt-1">{fieldErrors.name}</p>
+              )}
             </div>
           )}
-          
+
           <div>
             <label className="block text-sm font-medium mb-2">邮箱</label>
             <input
@@ -137,10 +176,16 @@ export function AuthForm({ type }: AuthFormProps) {
               required
               className="w-full px-3 py-2 bg-dark/50 border border-primary/20 rounded-lg focus:outline-none focus:border-primary"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value })
+                if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined })
+              }}
             />
+            {fieldErrors.email && (
+              <p className="text-xs text-red-400 mt-1">{fieldErrors.email}</p>
+            )}
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium mb-2">密码</label>
             <input
@@ -148,8 +193,14 @@ export function AuthForm({ type }: AuthFormProps) {
               required
               className="w-full px-3 py-2 bg-dark/50 border border-primary/20 rounded-lg focus:outline-none focus:border-primary"
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, password: e.target.value })
+                if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: undefined })
+              }}
             />
+            {fieldErrors.password && (
+              <p className="text-xs text-red-400 mt-1">{fieldErrors.password}</p>
+            )}
           </div>
 
           <Button 
