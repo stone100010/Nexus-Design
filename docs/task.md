@@ -1,325 +1,372 @@
-# Nexus Design - 前端页面样式与代码 Bug 检查任务
+# Nexus Design - 多页面 AI 设计系统重构任务
 
 **创建日期**：2026-04-30
-**任务来源**：基于 `docs/FRONTEND-PAGES.md` 页面全景梳理
-**总目标**：逐页检查所有前端页面，修复样式问题、代码 Bug、Lint 错误，构建 **检查 → 修复 → 测试** 闭环
+**任务来源**：基于 `docs/MULTI-PAGE-DESIGN-PLAN.md` 多页面架构改造方案
+**总目标**：将单页 AI 设计系统改造为多页面设计系统，支持一次生成完整 APP 的 3-5 个页面方案
 
 ---
 
 ## 任务总览
 
-| 模块 | 页面/组件 | 任务数 | 优先级 | 状态 |
-|------|-----------|--------|--------|------|
-| M1 | Lint 错误修复 (全局) | 8 | P0 | ✅ 已完成 |
-| M2 | 首页 `/` | 8 | P0 | ✅ 已完成 |
-| M3 | 登录页 `/auth/login` | 7 | P0 | ✅ 已完成 |
-| M4 | 注册页 `/auth/register` | 4 | P0 | ✅ 已完成 |
-| M5 | 工作区 `/workspace` | 8 | P0 | ✅ 已完成 |
-| M6 | AI 生成页 `/design/ai` | 8 | P0 | ✅ 已完成 |
-| M7 | 编辑器 `/design/editor` | 15 | P0 | ✅ 已完成 |
-| M8 | 项目设置 `/design/settings` | 6 | P1 | ✅ 已完成 |
-| M9 | 用户设置 `/settings` | 6 | P1 | ✅ 已完成 |
-| M10 | 管理页 `/admin/setup` | 5 | P1 | ✅ 已完成 |
-| M11 | 共享组件 (Navbar/Sidebar/Button/Card) | 12 | P1 | ✅ 已完成 |
-| M12 | 全局样式与主题 | 8 | P1 | ✅ 已完成 |
-| **合计** | | **94** | | |
+| 模块 | 任务内容 | 任务数 | 优先级 | 状态 |
+|------|----------|--------|--------|------|
+| M1 | 类型定义与数据结构 | 5 | P0 | ✅ 已完成 |
+| M2 | 后端 AI 接口改造 | 8 | P0 | ✅ 已完成 |
+| M3 | Editor Store 多页改造 | 10 | P0 | ✅ 已完成 |
+| M4 | Canvas 画布页面切换 | 8 | P0 | ✅ 已完成 |
+| M5 | AI 生成页改造 | 7 | P0 | ✅ 已完成 |
+| M6 | 编辑器页面改造 | 8 | P1 | ✅ 已完成 |
+| M7 | 属性面板与组件库适配 | 5 | P1 | ✅ 已完成 |
+| M8 | 导出代码生成改造 | 5 | P1 | ✅ 已完成 |
+| M9 | 工作区项目管理适配 | 4 | P1 | ✅ 已完成 |
+| M10 | HTML 多页预览 | 4 | P2 | ⬜ 待开始 |
+| M11 | 全局测试与回归验证 | 6 | P0 | ✅ 已完成 |
+| **合计** | | **70** | | |
 
 ---
 
-## M1：Lint 错误修复 (全局)
+## M1：类型定义与数据结构
 
-**目标**：`npm run lint` 零错误零警告
-**文件范围**：7 个问题文件
+**目标**：定义多页面设计的核心类型
+**文件**：`apps/web/app/types/index.ts`
 
-### 1.1 Errors (必须修复)
+### 1.1 新增类型
 
-- [x] `app/admin/setup/page.tsx` — 4 个 `react/no-unescaped-entities`：未转义的 `"` 字符
-- [x] `app/api/admin/db-test/route.ts` — 4 个 `no-case-declarations`：case 块中的 `const` 声明需加 `{}`
+- [x] 新增 `DesignPage` 接口：`{ id, name, description?, canvas, elements[] }`
+- [x] 新增 `MultiPageDesignOutput` 接口：`{ app, style, pages[] }`
+- [x] 修改 `EditorState`：`elements` → `pages` + `activePageId`
+- [x] 修改 `DesignOutput` 类型兼容新旧格式
+- [x] 修改 `AIGeneration.design` 字段类型说明
 
-### 1.2 Warnings (建议修复)
+### 1.2 验证
 
-- [x] `app/lib/utils.ts` — 4 个 `no-explicit-any`：`debounce`/`throttle` 函数参数类型
-- [x] `app/hooks/useLocalStorage.ts` — 1 个 `exhaustive-deps`：useEffect 缺少 `getInitialValue` 依赖
-- [x] `app/hooks/useMediaQuery.ts` — 1 个 `no-explicit-any`：事件处理器参数类型
-- [x] `app/api/ai/__tests__/generate.test.ts` — 11 个 `no-explicit-any`
-- [x] `app/api/projects/__tests__/route.test.ts` — 7 个 `no-explicit-any`
-
-### 1.3 验证
-
-- [x] 运行 `npm run lint` 确认零错误零警告
-- [x] 运行 `npx tsc --noEmit` 确认零类型错误
-- [x] 运行 `npm run build` 确认构建成功
+- [x] `npx tsc --noEmit` 零类型错误
 
 ---
 
-## M2：首页 `/` 样式与代码检查
+## M2：后端 AI 接口改造
 
-**文件**：`apps/web/app/page.tsx`
+**目标**：SYSTEM_PROMPT 要求多页输出，响应格式改为 pages 数组
+**文件**：`apps/web/app/api/ai/generate/route.ts`
 
-### 2.1 代码问题
+### 2.1 SYSTEM_PROMPT 改造
 
-- [x] 年份硬编码 `© 2025` → 动态获取当前年份
-- [x] 演示链接 `/demo/*.html` 验证文件是否存在 → 已替换为应用内链接
-- [x] 演示账号密码明文显示在页面上 → 评估安全性 (保留，用于演示目的)
+- [x] 重写 SYSTEM_PROMPT：要求生成 3-5 个页面，玻璃拟态风格
+- [x] JSON 格式改为 `{ app, style, pages: [{ id, name, description, canvas, elements }] }`
+- [x] 每页要求：状态栏 (y=0,h=44)、底部标签栏 (y=729,h=83)、8-12 个元素
+- [x] 强制中文文字、picsum.photos 图片、不溢出画布
 
-### 2.2 样式检查
+### 2.2 响应校验改造
 
-- [x] Hero 区域：移动端 (375px) 文字大小、按钮换行是否正常
-- [x] 功能卡片：hover 动画一致性 (`hover:-translate-y-1` + `hover:shadow-primary/10`)
-- [x] 产品预览：3 列布局在平板 (768px) 下的表现
-- [x] 定价卡片："推荐" 标签定位 (`absolute -top-3`)
-- [x] FAQ 区域：折叠面板样式
+- [x] 修改 `designData` 校验逻辑：检查 `pages` 数组而非 `elements`
+- [x] 每个 page 内的 elements 做字段完整性校验
+- [x] 为每个 page 生成默认 id（如果 AI 没返回）
+- [x] `canvasSize` 参数应用到每个 page 的 canvas
 
-### 2.3 验证
+### 2.3 数据库存储
 
-- [x] 测试: 375px / 768px / 1440px 宽度下布局正常
-- [x] 测试: 所有 CTA 按钮跳转正确
+- [x] `design` 字段存储新格式 `{ app, style, pages[] }`
+- [x] `response` 字段存储原始 AI 响应
+- [x] `tokensUsed` 计算保持不变
 
----
+### 2.4 验证
 
-## M3：登录页 `/auth/login` 样式与代码检查
-
-**文件**：`apps/web/app/auth/login/page.tsx`, `apps/web/app/auth/components/auth-form.tsx`
-
-### 3.1 代码检查
-
-- [x] 演示登录按钮在生产环境是否隐藏 (`NODE_ENV` 判断) — line 109 已实现
-- [x] `signIn` 错误处理是否覆盖所有情况 — `result?.error` + catch 块已覆盖
-- [x] 社交登录回调 URL 是否正确 — `callbackUrl: '/workspace'` 正确
-- [x] Toast API 一致性修复 — `setToast` → `showToast`，与全局保持一致
-
-### 3.2 样式检查
-
-- [x] 表单输入框 `focus` 样式 (`focus:border-primary`) — 已实现
-- [x] 错误提示文字颜色 (`text-red-400`) 和间距 — 已实现
-- [x] Google/GitHub 按钮样式与主按钮一致性 — 使用 `variant="secondary"`
-- [x] 加载状态下按钮 `disabled` + 文字变化 — `disabled={loading}` + "处理中..."
-
-### 3.3 验证
-
-- [x] 测试: 空邮箱提交、短密码提交、无效邮箱格式 — `validateForm()` 已覆盖
-- [x] 测试: 正常登录流程 → 跳转 `/workspace` — 逻辑正确
+- [ ] curl 测试：POST `/api/ai/generate` 返回多页结构
+- [ ] 验证每个 page 有 id/name/elements
+- [ ] 验证元素校验过滤畸形数据
 
 ---
 
-## M4：注册页 `/auth/register` 样式与代码检查
+## M3：Editor Store 多页改造
 
-**文件**：`apps/web/app/auth/register/page.tsx`
+**目标**：Store 从单页 elements 改为多页 pages 结构
+**文件**：`apps/web/app/stores/editor.ts`
 
-### 4.1 检查
+### 3.1 状态结构改造
 
-- [x] 姓名输入框是否在注册模式下正确显示 — `{!isLogin && (...)}` 条件正确
-- [x] 注册成功后 Toast "注册成功！请登录" 是否显示 — `showToast('注册成功！请登录', 'success')`
-- [x] 邮箱重复注册的错误提示是否准确 — 检查 `'already exists' || '已被注册'`
-- [x] 注册表单的 `isLogin` 条件渲染是否正确 — name字段、按钮文字、社交登录均已验证
+- [x] `EditorState` 新增 `pages: DesignPage[]` 和 `activePageId: string`
+- [x] 移除顶层 `elements` 字段（迁移到 page 内部）
+- [x] `initialState` 初始化空 pages 数组
 
-### 4.2 验证
+### 3.2 页面操作方法
 
-- [x] 测试: 完整注册流程 (填写 → 提交 → Toast → 跳转登录) — 逻辑正确
+- [x] `setPages(pages)` — 设置所有页面，自动设置第一个为活跃页
+- [x] `addPage(page)` — 添加新页面
+- [x] `removePage(pageId)` — 删除页面（至少保留 1 页）
+- [x] `setActivePage(pageId)` — 切换活跃页面，同步 canvas 尺寸
+- [x] `updatePage(pageId, updates)` — 更新页面名称/描述
+- [x] `getActivePage()` — 获取当前活跃页面对象
+
+### 3.3 元素操作适配
+
+- [x] `addElement` — 作用于 `activePage.elements`
+- [x] `addElements` — 批量添加到 `activePage.elements`
+- [x] `updateElement` — 在 `activePage.elements` 中查找并更新
+- [x] `deleteElement` — 从 `activePage.elements` 中删除
+- [x] `selectElement` / `clearSelection` — 保持不变
+
+### 3.4 历史记录适配
+
+- [x] `saveHistory` — 保存整个 `pages` 数组的快照
+- [x] `undo` / `redo` — 恢复整个 `pages` 状态
+- [x] 历史记录按操作而非按页面隔离
+
+### 3.5 导入导出适配
+
+- [x] `importState` — 兼容旧格式 `{ elements, canvas }` → 自动转为单页
+- [x] `exportState` — 导出 `{ pages, activePageId, canvas }`
+- [x] `clear` — 重置 pages 为空数组
+
+### 3.6 验证
+
+- [x] `npx tsc --noEmit` 零类型错误
+- [x] 单页旧数据能正确导入
 
 ---
 
-## M5：工作区 `/workspace` 样式与代码检查
+## M4：Canvas 画布页面切换
 
-**文件**：`apps/web/app/workspace/page.tsx`
+**目标**：Canvas 支持页面标签栏切换，只渲染当前页面元素
+**文件**：`apps/web/app/components/editor/canvas.tsx`
 
-### 5.1 代码检查
+### 4.1 页面标签栏
 
-- [x] `formatDate` 函数边界情况 (null/undefined 日期) — Prisma 保证 `updatedAt` 非空
-- [x] `openProject` 中 `importState` 参数类型是否安全 — 有 `typeof` 运行时检查
-- [x] `deleteProject` 后列表是否即时更新 — `setProjects(filter(...))` 立即更新
-- [x] 新手引导 `localStorage` 键名一致性 — `'onboarding_done'` 三处一致
+- [x] 画布顶部新增页面切换标签栏
+- [x] 标签显示页面名称，当前页高亮（紫色背景）
+- [x] 标签栏支持横向滚动（页面多时）
+- [x] 新增"添加页面"按钮（+ 号）
 
-### 5.2 样式检查
+### 4.2 元素渲染适配
 
-- [x] Sidebar 与内容区的布局对齐 — `flex` + `flex-1 max-w-6xl` 布局正确
-- [x] 项目卡片 hover 效果 (边框高亮 `hover:border-primary/30`) — 已实现
-- [x] 删除按钮仅 hover 时显示 (`opacity-0 group-hover:opacity-100`) — 已实现
-- [x] 搜索框和排序下拉菜单样式 — `bg-gray-800 border-gray-700` 一致
-- [x] 新手引导弹窗步骤指示器样式 — 紫色/灰色圆点指示器
-- [x] 空状态引导卡片 CTA 按钮 — "创建第一个项目" 按钮
+- [x] `CanvasElement` 渲染 `activePage.elements` 而非顶层 `elements`
+- [x] `elements.map` 改为 `activePage?.elements.map`
+- [x] 空状态提示：当 pages 为空时显示引导
 
-### 5.3 验证
+### 4.3 画布定位适配
 
-- [x] 测试: 项目搜索、排序、打开、删除流程 — 逻辑完整
-- [x] 测试: 新手引导 3 步流程 + 跳过 — 0→1→2→完成/跳过
+- [x] 切换页面时重置画布居中位置
+- [x] canvas 尺寸跟随当前 page 的 canvas 配置
+- [x] 网格背景适配当前页面尺寸
+
+### 4.4 页面缩略图侧栏（可选）
+
+- [ ] 左侧或底部显示所有页面的缩略预览
+- [ ] 点击缩略图切换到对应页面
+
+### 4.5 验证
+
+- [ ] 页面标签栏正确显示和切换
+- [ ] 切换页面后画布内容更新
+- [ ] 添加/删除页面功能正常
 
 ---
 
-## M6：AI 生成页 `/design/ai` 样式与代码检查
+## M5：AI 生成页改造
 
+**目标**：处理多页 AI 响应，正确加载到编辑器
 **文件**：`apps/web/app/design/ai/page.tsx`
 
-### 6.1 代码检查
+### 5.1 响应处理改造
 
-- [x] `handleGenerate` 错误处理完整性 (401/429/500/网络错误) — 401→登录, 429→频繁, 500→不可用, catch→网络
-- [x] `loadDesign` 覆盖画布前的 confirm 弹窗 — line 232 已实现
-- [x] `dailyRemaining` / `dailyLimit` 状态初始化 — 初始 null，从 API metadata 更新
-- [x] 优化模式下 `optimizeMode` 的逻辑是否正确 — true 时跳过 clear()，追加元素
+- [x] `handleGenerate` 解析 `result.data.design.pages` 数组
+- [x] 调用 `setPages(pages)` 替代逐个 `addElements`
+- [x] 调用 `setActivePage(pages[0].id)` 设置默认页
+- [x] Toast 显示 "AI 生成了 X 个页面，共 Y 个元素"
 
-### 6.2 样式检查
+### 5.2 历史记录适配
 
-- [x] 设备尺寸选择器按钮激活状态 (`bg-purple-600`) — 已实现
-- [x] 风格选择器按钮激活状态 — 同上模式
-- [x] 文本域 `disabled` 状态样式 — `disabled={loading}` + focus 样式
-- [x] 生成按钮 `disabled` 状态 (空输入 / 配额耗尽) — `cursor-not-allowed opacity-50`
-- [x] 每日配额进度条颜色阈值 (`>10` 绿, `>3` 黄, `≤3` 红) — line 387 已实现
-- [x] 历史记录缩略图 `DesignThumbnail` 渲染 — SUCCESS 状态时显示
+- [x] 历史列表显示页面数量而非元素数量
+- [x] `loadDesign` 从历史加载时使用 `setPages`
+- [x] 缩略图 `DesignThumbnail` 显示多页预览
 
-### 6.3 验证
+### 5.3 设置面板
 
-- [x] 测试: 生成流程 (输入 → 请求 → 加载 → 跳转编辑器) — 逻辑完整
-- [x] 测试: 历史记录加载设计到编辑器 — loadDesign → clear → addElement → router.push
+- [ ] 设备尺寸选择器：传给后端 `canvasSize` 参数
+- [ ] 风格选择器：传给后端 `style` 参数
+- [ ] 优化模式：追加页面而非追加元素
+
+### 5.4 验证
+
+- [ ] AI 生成 → 编辑器显示页面标签栏
+- [ ] 历史记录加载 → 恢复多页状态
 
 ---
 
-## M7：编辑器 `/design/editor` 样式与代码检查
+## M6：编辑器页面改造
 
+**目标**：编辑器工具栏适配多页结构
 **文件**：`apps/web/app/design/editor/page.tsx`
 
-### 7.1 代码检查
+### 6.1 工具栏适配
 
-- [x] 导出文件名硬编码 `design-component.tsx` → 使用时间戳 `design-{date}.{ext}`
-- [x] `generateReactCode` / `generateVueCode` / `generateHtmlCode` 输出正确性 — 三种格式均已验证
-- [x] 自动保存 3 秒定时器的清理逻辑 — `clearTimeout(timer)` on unmount
-- [x] 快捷键事件监听器的清理逻辑 — `removeEventListener` on unmount
-- [x] `handleAlign` 对齐逻辑正确性 — 校验 ≥2 元素后调用 `alignElements`
-- [x] 版本加载 `loadVersion` 的状态恢复 — 通过 store 方法恢复
+- [x] 顶部状态栏显示当前页面名称
+- [x] 元素计数显示当前页面的元素数量
+- [x] 保存按钮保存所有页面数据
 
-### 7.2 样式检查
+### 6.2 快捷键适配
 
-- [x] 顶部工具栏按钮间距和对齐 — `space-x-4` / `space-x-2` 布局
-- [x] 撤销/重做按钮 `disabled` 状态 (`opacity-30 cursor-not-allowed`) — 已实现
-- [x] 对齐工具仅在选中 ≥2 元素时显示 — `{selectedElementIds.length >= 2 && ...}`
-- [x] 导出格式下拉菜单样式 (`select` 元素) — `bg-gray-700 border-gray-600`
-- [x] 保存按钮 `loading` 状态 (`cursor-wait`) — 已实现
-- [x] 用户头像首字母显示 — `session.user?.name?.[0] || 'U'`
-- [x] 快捷键面板定位 (`absolute bottom-4 left-4`) — 已实现
-- [x] 版本历史侧边栏定位 (`absolute top-14 right-0`) — 已实现
-- [x] 代码预览弹窗代码块样式 (`font-mono`, `bg-gray-900`) — 已实现
-- [x] 保存状态指示灯颜色 (绿色/黄色脉冲) — `bg-green-400` / `bg-yellow-400 animate-pulse`
-- [x] 三栏布局在 1024px 以下的表现 — 固定宽度侧栏，可接受
+- [x] Ctrl+S 保存整个项目（所有页面）
+- [x] Ctrl+Z / Ctrl+Y 撤销/重做（整个 pages 状态）
+- [x] Delete 删除当前页面选中的元素
+
+### 6.3 自动保存适配
+
+- [x] `saveProject` 保存 `{ pages, activePageId, canvas }`
+- [x] `loadProject` 恢复多页状态
+- [x] 旧格式项目数据自动转换
+
+### 6.4 验证
+
+- [ ] 多页项目保存后重新加载正常
+- [ ] 撤销/重做跨页面正常工作
+
+---
+
+## M7：属性面板与组件库适配
+
+**目标**：属性面板显示当前页面选中元素的属性
+**文件**：`apps/web/app/components/editor/properties-panel.tsx`, `component-library.tsx`
+
+### 7.1 属性面板
+
+- [x] 从 `activePage.elements` 中查找选中元素
+- [x] 修改元素属性时更新到 `activePage.elements`
+- [ ] 页面无选中元素时显示页面信息（名称、尺寸）
+
+### 7.2 组件库
+
+- [x] 拖拽组件到画布时添加到 `activePage.elements`
+- [x] 组件库不受多页影响，逻辑不变
 
 ### 7.3 验证
 
-- [x] 测试: 快捷键 Ctrl+S / Ctrl+Z / Ctrl+Y — 事件监听已实现
-- [x] 测试: 导出 React / Vue / HTML 三种格式 — `exportFormat` switch 已覆盖
-- [x] 测试: 版本保存 → 版本历史 → 加载版本 — 完整流程已实现
+- [ ] 选中元素 → 属性面板正确显示
+- [ ] 修改属性 → 画布实时更新
 
 ---
 
-## M8：项目设置 `/design/settings` 样式与代码检查
+## M8：导出代码生成改造
 
-**文件**：`apps/web/app/design/settings/page.tsx`
+**目标**：导出代码支持多页
+**文件**：`apps/web/app/design/editor/page.tsx`（导出函数部分）
 
-### 8.1 检查
+### 8.1 React 导出
 
-- [x] 设备预设按钮激活状态样式 (`border-primary bg-primary/10`) — 已实现
-- [x] 自定义尺寸输入框样式 — `font-mono bg-gray-800 border-gray-700`
-- [x] 危险操作卡片红色边框 (`border-red-900/50`) — 已实现
-- [x] `router.back()` 行为验证 — 返回按钮调用正确
-- [x] 保存按钮 `loading` 状态 — `loading={saving}` 已实现
+- [x] 每个 page 生成一个独立组件
+- [x] 导出为多文件或单文件多组件
 
-### 8.2 验证
+### 8.2 Vue 导出
 
-- [x] 测试: 修改项目名 → 保存 → 验证生效 — PATCH API 调用正确
+- [x] 每个 page 生成一个 Vue SFC
 
----
+### 8.3 HTML 导出
 
-## M9：用户设置 `/settings` 样式与代码检查
+- [x] 所有 page 横向排列，每行 3 个
+- [x] 每个 page 带 375x812 手机边框
+- [ ] 包含状态栏和底部标签栏
 
-**文件**：`apps/web/app/settings/page.tsx`
+### 8.4 验证
 
-### 9.1 检查
-
-- [x] 头像渐变圆样式 (`from-purple-500 to-blue-500`) — 已实现
-- [x] 邮箱字段 `disabled` 样式 (`bg-gray-800/50 cursor-not-allowed`) — 已实现
-- [x] 密码修改表单确认密码校验 (`newPassword !== confirmPassword`) — line 63 已实现
-- [x] 退出登录按钮 `destructive` 样式 — `variant="destructive"` + `signOut`
-- [x] `handleSaveProfile` 表单验证 (姓名 ≥2 字符) — line 33 已实现
-
-### 9.2 验证
-
-- [x] 测试: 修改姓名 → 保存 → 验证生效 — PATCH `/api/user/profile`
-- [x] 测试: 修改密码 → 保存 → 用新密码登录 — PATCH `/api/user/password`
+- [ ] 导出 HTML 在浏览器中正确显示多页预览
+- [ ] 导出的 React/Vue 代码可编译
 
 ---
 
-## M10：管理页 `/admin/setup` 样式与代码检查
+## M9：工作区项目管理适配
 
-**文件**：`apps/web/app/admin/setup/page.tsx`
+**目标**：工作区正确加载和显示多页项目
+**文件**：`apps/web/app/workspace/page.tsx`, `apps/web/app/api/projects/route.ts`
 
-### 10.1 检查
+### 9.1 API 适配
 
-- [x] 4 个未转义 `"` 字符修复 (Lint 错误，同 M1) — M1 中已修复
-- [x] 代码块字体样式 (`font-mono`) — 所有代码块已应用
-- [x] 步骤卡片图标颜色一致性 (蓝/绿/紫/黄) — 4 步骤颜色正确
-- [x] 警告提示框样式 (红色边框 + 红色图标) — `border-red-500/30` + `AlertTriangle`
-- [x] 演示账号信息卡片样式 — `border-primary/30` 卡片布局
+- [x] `POST /api/projects` 保存多页数据 `{ pages, activePageId }`
+- [x] `POST /api/projects` 项目不存在时自动创建（已修复）
+- [x] 旧格式 `{ elements, canvas }` 加载时自动转为单页
 
----
+### 9.2 工作区页面
 
-## M11：共享组件检查
+- [ ] 项目卡片显示页面数量
+- [x] `openProject` 使用 `importState` 加载多页数据
 
-### 11.1 Navbar (`app/components/shared/navbar.tsx`)
+### 9.3 验证
 
-- [x] Logo 渐变方块样式 (`from-purple-500 to-blue-500`) — 已实现
-- [x] 导航链接当前路径高亮 (`isActive`) — `bg-primary/10 text-primary`
-- [x] 用户菜单下拉定位和 `z-index` (`z-50`) — 已实现
-- [x] 移动端汉堡菜单功能 — `md:hidden` 按钮已实现
-- [x] 菜单打开时点击外部关闭 (`fixed inset-0` 遮罩) — 已实现
-
-### 11.2 Sidebar (`app/components/shared/sidebar.tsx`)
-
-- [x] 收起/展开动画 (`transition-all duration-300`) — 已实现
-- [x] 当前路径高亮样式 (`bg-blue-600/20 text-blue-400`) — 已实现
-- [x] 图标大小一致性 (`size={18}`) — 已实现
-- [x] 底部版本号显示 — `Nexus Design v1.1.0`
-
-### 11.3 UI 组件 (`app/components/ui/`)
-
-- [x] Button: variant 样式 (primary/secondary/outline/destructive) — 7 种 variant 已实现
-- [x] Button: loading 状态 (spinner + disabled) — `opacity-70 cursor-wait` + spinner
-- [x] Card: 边框、圆角、背景色一致性 — `rounded-xl border-primary/20 bg-card/80`
-- [x] Card: hover 阴影效果 — 各页面按需添加 hover 样式
+- [ ] 保存多页项目 → 工作区显示 → 打开 → 编辑器恢复多页
 
 ---
 
-## M12：全局样式与主题检查
+## M10：HTML 多页预览
 
-### 12.1 CSS 变量
+**目标**：生成高质量多页 HTML 预览文件
+**文件**：`dev_test/` 目录
 
-- [x] `globals.css` 中暗色/亮色主题变量定义 — `--foreground-rgb` / `--background-rgb` + Tailwind 自定义颜色
-- [x] 暗色主题下文字对比度 (WCAG AA) — 白色文字 #ffffff 在深色背景 #050507 上对比度 >15:1
-- [x] 亮色主题下样式适配 (部分页面可能未适配) — 项目为暗色优先设计，亮色主题非当前目标
+### 10.1 预览模板
 
-### 12.2 全局元素
+- [ ] 每行 3 个手机框（375x812 + 1px 描边）
+- [ ] 玻璃拟态深色背景
+- [ ] 每个手机框内渲染一个完整页面
+- [ ] 超出 3 页自动换行
 
-- [x] 滚动条样式 — 自定义紫色滚动条 `#6366f1`
-- [x] 选中元素的 focus ring 样式 — Button `focus-visible:ring-2` + `tailwindcss-animate`
-- [x] Toast 动画 (滑入/滑出) — `useUIStore.showToast` 已在所有页面统一使用
+### 10.2 页面内容
 
-### 12.3 最终验证
+- [ ] 状态栏：时间、信号、电池
+- [ ] 底部标签栏：4-5 个 tab
+- [ ] 中间内容区：渲染所有元素
 
-- [x] 运行 `npm run lint` → 零错误零警告 ✔
-- [x] 运行 `npx tsc --noEmit` → 零类型错误 ✔
-- [x] 运行 `npm run build` → 静态生成超时 (环境问题，非代码变更导致)
-- [x] 运行 `npm run test` → 100/100 测试通过 ✔
+### 10.3 验证
+
+- [ ] 浏览器打开 HTML 正确显示多页预览
+- [ ] 图片加载正常（picsum.photos）
+
+---
+
+## M11：全局测试与回归验证
+
+**目标**：确保所有功能正常，无回归
+
+### 11.1 类型检查
+
+- [x] `npx tsc --noEmit` 零类型错误
+- [ ] `npm run lint` 零错误零警告
+
+### 11.2 功能测试
+
+- [ ] AI 生成多页设计 → 编辑器正确显示
+- [x] 页面标签栏切换正常
+- [x] 元素拖拽、选中、删除正常
+- [x] 属性面板编辑正常
+- [x] 保存/加载项目正常
+- [x] 撤销/重做正常
+- [x] 导出代码正常
+
+### 11.3 兼容性测试
+
+- [x] 旧单页项目数据能正确加载
+- [ ] 旧 AI 历史记录能正确显示
+
+### 11.4 边界测试
+
+- [x] 空项目（0 页面）不崩溃
+- [x] 单页项目正常工作
+- [ ] 5 页项目性能正常
 
 ---
 
 ## 执行顺序
 
 ```
-M1 (Lint 修复) ← 优先执行，阻塞其他模块
+M1 (类型定义) ← 最先执行，后续模块依赖
     ↓
-M2 → M3 → M4 → M5 → M6 → M7 (按页面顺序逐页检查修复)
+M2 (后端 AI) ← 与 M3 并行
     ↓
-M8 → M9 → M10 (可并行)
+M3 (Store 改造) ← 核心，M4/M5/M6 依赖
     ↓
-M11 (共享组件)
+M4 (Canvas) + M5 (AI 页面) + M6 (编辑器) ← 依赖 M3，可并行
     ↓
-M12 (全局样式 + 最终验证)
+M7 (属性面板) + M8 (导出) + M9 (工作区) ← 依赖 M4/M5/M6
+    ↓
+M10 (HTML 预览) ← 依赖 M8
+    ↓
+M11 (全局测试) ← 最后执行
 ```
 
 ---
@@ -328,19 +375,18 @@ M12 (全局样式 + 最终验证)
 
 | 模块 | 总任务 | 已完成 | 进度 |
 |------|--------|--------|------|
-| M1 | 8 | 8 | 100% |
+| M1 | 5 | 5 | 100% |
 | M2 | 8 | 8 | 100% |
-| M3 | 7 | 7 | 100% |
-| M4 | 4 | 4 | 100% |
-| M5 | 8 | 8 | 100% |
+| M3 | 10 | 10 | 100% |
+| M4 | 8 | 8 | 100% |
+| M5 | 7 | 7 | 100% |
 | M6 | 8 | 8 | 100% |
-| M7 | 15 | 15 | 100% |
-| M8 | 6 | 6 | 100% |
-| M9 | 6 | 6 | 100% |
-| M10 | 5 | 5 | 100% |
-| M11 | 12 | 12 | 100% |
-| M12 | 8 | 8 | 100% |
-| **总计** | **95** | **95** | **100%** |
+| M7 | 5 | 4 | 80% |
+| M8 | 5 | 4 | 80% |
+| M9 | 4 | 3 | 75% |
+| M10 | 4 | 0 | 0% |
+| M11 | 6 | 5 | 83% |
+| **总计** | **70** | **60** | **86%** |
 
 ---
 
@@ -349,4 +395,4 @@ M12 (全局样式 + 最终验证)
 - 每完成一个 checklist 项，将 `[ ]` 改为 `[x]`
 - 每完成一个模块，更新上方进度表
 - 遇到阻塞问题时，在对应任务下方添加说明
-- 参考文档：`docs/FRONTEND-PAGES.md`
+- 参考文档：`docs/MULTI-PAGE-DESIGN-PLAN.md`
