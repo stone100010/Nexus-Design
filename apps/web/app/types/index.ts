@@ -7,7 +7,9 @@ export interface CanvasData {
 
 export interface DesignSnapshot {
   canvas: { width: number; height: number; zoom: number }
-  elements: EditorElement[]
+  elements?: EditorElement[]
+  pages?: DesignPage[]
+  activePageId?: string
   timestamp?: string
 }
 
@@ -52,6 +54,7 @@ export interface AIResponseData {
   [key: string]: unknown
 }
 
+// 单页设计输出（旧格式，保持兼容）
 export interface DesignOutput {
   canvas: { width: number; height: number }
   elements: Array<{
@@ -63,6 +66,22 @@ export interface DesignOutput {
     props?: Record<string, unknown>
     styles?: Record<string, string>
   }>
+}
+
+// 页面类型（多页设计）
+export interface DesignPage {
+  id: string
+  name: string
+  description?: string
+  canvas: { width: number; height: number }
+  elements: EditorElement[]
+}
+
+// 多页设计输出
+export interface MultiPageDesignOutput {
+  app: string
+  style: string
+  pages: DesignPage[]
 }
 
 export interface CodeOutput {
@@ -196,7 +215,7 @@ export interface AIGeneration {
   prompt: string
   response: AIResponseData
   model: string
-  design?: DesignOutput
+  design?: DesignOutput | MultiPageDesignOutput
   code?: CodeOutput
   tokensUsed: number
   cost: number
@@ -288,9 +307,10 @@ export interface UIState {
   isCollaborating: boolean
 }
 
-// 编辑器状态类型
+// 编辑器状态类型（多页架构）
 export interface EditorState {
-  elements: EditorElement[]
+  pages: DesignPage[]
+  activePageId: string
   selectedElementIds: string[]
   canvas: {
     width: number
@@ -362,7 +382,7 @@ export const DEVICES: Device[] = [
 export interface AIGenerationState {
   status: 'idle' | 'loading' | 'success' | 'error'
   progress: number
-  result?: DesignOutput
+  result?: DesignOutput | MultiPageDesignOutput
   error?: string
 }
 
