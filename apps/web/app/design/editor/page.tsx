@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  Activity,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -9,23 +8,24 @@ import {
   BookOpen,
   Download,
   History,
+  Loader2,
   Moon,
   Play,
   Save,
+  Send,
   Settings as SettingsIcon,
   Sun,
   Trash2,
-  Zap,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { useCallback, useEffect, useMemo,useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { AIStreamStatus, getTotalEstimatedTokens, readAIStreamStatus, subscribeAIStreamStatus } from '@/lib/ai-stream-status'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
+import { DesignPage } from '@/types'
 
 // Dynamic imports for code splitting
 const Canvas = dynamic(() => import('@/components/editor/canvas'), { ssr: false })
@@ -35,6 +35,8 @@ const PropertiesPanel = dynamic(() => import('@/components/editor/properties-pan
 function DesignEditorContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const projectId = searchParams.get('id')
   const {
     saveProject,
     loadProject,
@@ -66,7 +68,131 @@ function DesignEditorContent() {
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [versions, setVersions] = useState<Record<string, unknown>[]>([])
   const [exportFormat, setExportFormat] = useState<'react' | 'vue' | 'html'>('react')
-  const [aiStreamStatus, setAIStreamStatus] = useState<AIStreamStatus | null>(null)
+  const [aiInput, setAiInput] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiTokens, setAiTokens] = useState(0)
+  const [aiPagesReceived, setAiPagesReceived] = useState(0)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const handleAIGenerate = useCallback(async () => {
+    const trimmed = aiInput.trim()
+    if (!trimmed || aiGenerating) return
+
+    setAiGenerating(true)
+    setAiTokens(0)
+    setAiPagesReceived(0)
+
+    const { clear, addPage, setActivePage } = useEditorStore.getState()
+    clear()
+
+    const abort = new AbortController()
+    abortRef.current = abort
+
+    try {
+      const response = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: trimmed, stream: true }),
+        signal: abort.signal,
+      })
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}))
+        showToast(result.error || 'AI 生成失败', 'error')
+        setAiGenerating(false)
+        return
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        showToast('响应流异常', 'error')
+        setAiGenerating(false)
+        return
+      }
+
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+      let receivedPages = 0
+      let firstPageSet = false
+
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        sseBuffer += decoder.decode(value, { stream: true })
+        const events = sseBuffer.split('\n\n')
+        sseBuffer = events.pop() || ''
+
+        for (const event of events) {
+          const line = event.trim()
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+
+            if (data.type === 'progress') {
+              setAiTokens(data.estimatedTokens ?? 0)
+
+            } else if (data.type === 'page') {
+              receivedPages++
+              const page = data.page as DesignPage
+              addPage(page)
+              if (!firstPageSet) {
+                setActivePage(page.id)
+                firstPageSet = true
+              }
+              setAiPagesReceived(receivedPages)
+              setAiTokens(data.estimatedTokens ?? 0)
+
+            } else if (data.type === 'done') {
+              setAiTokens(data.estimatedTokens ?? 0)
+              setAiPagesReceived(data.totalPages ?? receivedPages)
+              showToast(`AI 生成了 ${data.totalPages} 个页面`, 'success')
+
+              // 保存到数据库并更新 URL
+              const state = useEditorStore.getState()
+              if (state.pages.length > 0) {
+                try {
+                  // 使用用户输入的 prompt 前20个字作为项目名称
+                  const projectName = aiInput.trim().slice(0, 20) || `AI 设计 - ${new Date().toLocaleDateString('zh-CN')}`
+                  const res = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: projectName,
+                      description: aiInput.trim(),
+                      data: {
+                        pages: state.pages,
+                        activePageId: state.activePageId,
+                        canvas: state.canvas,
+                      },
+                    }),
+                  })
+                  const result = await res.json()
+                  if (result.success && result.data?.id) {
+                    localStorage.setItem('currentProjectId', result.data.id)
+                    window.history.replaceState(null, '', `/design/editor?id=${result.data.id}`)
+                  }
+                } catch { /* ignore */ }
+              }
+
+            } else if (data.type === 'error') {
+              showToast(data.error || 'AI 生成失败', 'error')
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+
+      if (receivedPages === 0) {
+        showToast('AI 未返回有效数据，请重试', 'warning')
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      showToast('网络连接失败', 'error')
+    } finally {
+      setAiGenerating(false)
+      abortRef.current = null
+    }
+  }, [aiInput, aiGenerating, showToast])
 
   // 检查认证状态
   useEffect(() => {
@@ -75,24 +201,51 @@ function DesignEditorContent() {
     }
   }, [status, router])
 
+  // 从 URL 加载项目数据
+  const [projectLoaded, setProjectLoaded] = useState(false)
   useEffect(() => {
-    const current = readAIStreamStatus()
-    if (current?.active) {
-      setAIStreamStatus(current)
-    }
-    return subscribeAIStreamStatus((nextStatus) => {
-      setAIStreamStatus(nextStatus.active ? nextStatus : null)
-    })
-  }, [])
+    if (status !== 'authenticated' || !projectId || projectLoaded) return
+    const { importState } = useEditorStore.getState()
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`)
+        const result = await res.json()
+        if (result.success && result.data?.data) {
+          const data = result.data.data
+          importState({
+            pages: data.pages || [],
+            activePageId: data.activePageId || data.pages?.[0]?.id || '',
+            canvas: data.canvas,
+          })
+          localStorage.setItem('currentProjectId', projectId)
+        }
+      } catch { /* ignore */ }
+      setProjectLoaded(true)
+    })()
+  }, [status, projectId, projectLoaded])
 
   // 自动保存
   useEffect(() => {
-    if (elements.length > 0) {
-      const timer = setTimeout(() => {
-        saveProject('draft')
-      }, 3000)
-      return () => clearTimeout(timer)
-    }
+    if (pages.length === 0) return
+    const timer = setTimeout(() => {
+      if (projectId) {
+        // 有项目 ID，更新云端项目
+        const state = useEditorStore.getState()
+        fetch(`/api/projects/${projectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data: {
+              pages: state.pages,
+              activePageId: state.activePageId,
+              canvas: state.canvas,
+            },
+          }),
+        }).catch(() => {})
+      }
+      // 没有 projectId 时不自动创建"草稿项目"，等待 AI 生成时再保存
+    }, 3000)
+    return () => clearTimeout(timer)
   }, [elements, saveProject])
 
   // 保存处理函数
@@ -170,11 +323,6 @@ function DesignEditorContent() {
   const handleCopyCode = () => {
     navigator.clipboard.writeText(generatedCode)
     showToast('代码已复制到剪贴板', 'success')
-  }
-
-  const handleAI = () => {
-    showToast('AI 生成器即将推出', 'info')
-    router.push('/design/ai')
   }
 
   const handleClear = () => {
@@ -445,8 +593,6 @@ ${pageHtml}
     return null
   }
 
-  const aiStreamTokens = getTotalEstimatedTokens(aiStreamStatus)
-
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       {/* 顶部工具栏 */}
@@ -498,15 +644,6 @@ ${pageHtml}
               <History size={16} />
             </button>
           </div>
-
-          {/* AI 生成 */}
-          <button
-            onClick={handleAI}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-xs transition-colors"
-          >
-            <Zap size={14} />
-            <span>AI 生成</span>
-          </button>
 
           {/* 对齐工具 */}
           {selectedElementIds.length >= 2 && (
@@ -636,9 +773,55 @@ ${pageHtml}
           <ComponentLibrary />
         </div>
 
-        {/* 中间：画布 */}
-        <div className="flex-1 bg-gray-900 relative">
-          <Canvas />
+        {/* 中间：画布 + AI 输入栏 */}
+        <div className="flex-1 flex flex-col bg-gray-900">
+          <div className="flex-1 relative overflow-hidden">
+            <Canvas />
+          </div>
+          {/* AI 输入栏 - 仅在画布下方 */}
+          <div className="h-14 bg-gray-800/95 backdrop-blur border-t border-gray-700 flex items-center px-4 gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleAIGenerate()
+                  }
+                }}
+                placeholder={aiGenerating ? 'AI 正在生成中...' : '描述你想要的 APP 设计，按 Enter 发送'}
+                disabled={aiGenerating}
+                className="w-full h-9 px-4 pr-3 bg-gray-900/80 border border-gray-600 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 disabled:opacity-60 transition-colors"
+              />
+            </div>
+            <button
+              onClick={handleAIGenerate}
+              disabled={aiGenerating || !aiInput.trim()}
+              className={cn(
+                'h-9 px-4 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                aiGenerating
+                  ? 'bg-purple-600/50 text-purple-200 cursor-wait'
+                  : 'bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+            >
+              {aiGenerating ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>生成中</span>
+                  {aiPagesReceived > 0 && (
+                    <span className="text-xs opacity-80">{aiPagesReceived}页 · {aiTokens}tokens</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Send size={14} />
+                  <span>生成设计</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* 右侧：属性面板 */}
@@ -711,42 +894,6 @@ ${pageHtml}
       {isSaving && (
         <div className="absolute top-20 right-4 bg-blue-600/90 backdrop-blur text-white text-xs px-3 py-2 rounded-lg shadow-lg animate-pulse">
           保存中...
-        </div>
-      )}
-
-      {/* AI 生成状态：首屏跳转到编辑器后继续显示 tokens */}
-      {aiStreamStatus && (
-        <div className="fixed left-1/2 top-16 z-[100] w-[min(920px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-cyan-300/40 bg-gray-950/95 p-4 text-white shadow-2xl shadow-cyan-950/40 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cyan-100">
-              <Activity size={16} className="animate-pulse text-cyan-300" />
-              <span>AI 正在生成</span>
-            </div>
-            <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-xs text-cyan-200">
-              {aiStreamStatus.pages} 页
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-            <div className="rounded-xl bg-cyan-400/10 px-3 py-2">
-              <div className="text-cyan-200">总 tokens</div>
-              <div className="text-2xl font-bold text-cyan-50">{aiStreamTokens.toLocaleString()}</div>
-            </div>
-            <div className="rounded-xl bg-white/5 px-3 py-2">
-              <div className="text-gray-400">输出</div>
-              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.estimatedTokens.toLocaleString()}</div>
-            </div>
-            <div className="rounded-xl bg-white/5 px-3 py-2">
-              <div className="text-gray-400">字符</div>
-              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.chars.toLocaleString()}</div>
-            </div>
-            <div className="rounded-xl bg-white/5 px-3 py-2">
-              <div className="text-gray-400">耗时</div>
-              <div className="text-lg font-semibold text-gray-100">{aiStreamStatus.elapsed}s</div>
-            </div>
-          </div>
-          <div className="mt-3 truncate text-xs text-gray-300">
-            {aiStreamStatus.message}
-          </div>
         </div>
       )}
 
