@@ -486,7 +486,7 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-6">
               <a href="/workspace" className="hover:text-primary transition-colors">工作区</a>
-              <a href="/design/ai" className="hover:text-primary transition-colors">AI 生成</a>
+              <a href="/design/editor" className="hover:text-primary transition-colors">编辑器</a>
               <a href="/auth/login" className="hover:text-primary transition-colors">登录</a>
               <a href="/auth/register" className="hover:text-primary transition-colors">注册</a>
             </div>

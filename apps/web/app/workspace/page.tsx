@@ -1,16 +1,29 @@
 'use client'
 
+import { AnimatePresence,motion } from 'framer-motion'
+import { 
+  ChevronRight,
+  Clock,
+  Code2,
+  FolderOpen,
+  LayoutTemplate, 
+  Loader2,
+  Palette,
+  Plus, 
+  Search, 
+  Sparkles, 
+  Trash2,
+  X} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Navbar } from '@/components/shared/navbar'
-import { Sidebar } from '@/components/shared/sidebar'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
-import { DesignPage, EditorElement, EditorState } from '@/types'
+import { DesignPage, EditorElement } from '@/types'
 
 interface Project {
   id: string
@@ -42,16 +55,354 @@ function getProjectStats(data: unknown) {
   return { pageCount: 0, elementCount: 0 }
 }
 
+// 生成项目缩略图的简化版本
+function ProjectThumbnail({ data }: { data: unknown }) {
+  const pages = data && typeof data === 'object' ? (data as { pages?: DesignPage[] }).pages : null
+  const firstPage = pages?.[0]
+  
+  if (!firstPage || !firstPage.elements?.length) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+        <LayoutTemplate className="w-8 h-8 text-gray-600" />
+      </div>
+    )
+  }
+
+  const scale = 280 / (firstPage.canvas?.width || 375)
+  
+  return (
+    <div className="w-full h-full overflow-hidden bg-[#0f0c29] relative">
+      {firstPage.elements.slice(0, 12).map((el, i) => (
+        <div
+          key={i}
+          className="absolute rounded-sm"
+          style={{
+            left: el.x * scale,
+            top: el.y * scale,
+            width: el.width * scale,
+            height: el.height * scale,
+            background: (el.styles?.background as string) || '#374151',
+            opacity: 0.9,
+          }}
+        >
+          {el.type === 'text' && (
+            <div className="w-full h-full flex items-center overflow-hidden">
+              <span 
+                className="text-[6px] truncate px-0.5"
+                style={{ color: (el.styles?.color as string) || '#fff' }}
+              >
+                {String(el.props?.text || '').slice(0, 15)}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// 快速操作卡片组件
+function QuickActionCard({ 
+  icon: Icon, 
+  title, 
+  description, 
+  gradient,
+  onClick,
+  delay = 0
+}: { 
+  icon: React.ElementType
+  title: string
+  description: string
+  gradient: string
+  onClick: () => void
+  delay?: number
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4, ease: 'easeOut' }}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      onClick={onClick}
+      className="group relative cursor-pointer"
+    >
+      {/* 背景发光效果 */}
+      <div className={cn(
+        "absolute -inset-0.5 rounded-2xl opacity-0 blur-xl transition-opacity duration-300",
+        "group-hover:opacity-60",
+        gradient
+      )} />
+      
+      {/* 卡片内容 */}
+      <div className="relative bg-gray-900/80 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 transition-all duration-300 group-hover:border-gray-600/50 overflow-hidden">
+        {/* 背景装饰 */}
+        <div className={cn(
+          "absolute top-0 right-0 w-32 h-32 opacity-10 blur-2xl",
+          gradient
+        )} />
+        
+        <div className="relative">
+          {/* 图标 */}
+          <div className={cn(
+            "w-14 h-14 rounded-xl flex items-center justify-center mb-4",
+            "bg-gradient-to-br",
+            gradient
+          )}>
+            <Icon className="w-7 h-7 text-white" />
+          </div>
+          
+          {/* 标题和描述 */}
+          <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">{description}</p>
+          
+          {/* 箭头 */}
+          <div className="flex items-center gap-1 mt-4 text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
+            <span>开始创建</span>
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// 项目卡片组件
+function ProjectCard({ 
+  project, 
+  onClick, 
+  onDelete,
+  index 
+}: { 
+  project: Project
+  onClick: () => void
+  onDelete: (e: React.MouseEvent) => void
+  index: number
+}) {
+  const stats = getProjectStats(project.data)
+  
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return '刚刚'
+    if (diffMins < 60) return `${diffMins} 分钟前`
+    if (diffHours < 24) return `${diffHours} 小时前`
+    if (diffDays < 7) return `${diffDays} 天前`
+    return date.toLocaleDateString('zh-CN')
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.05, duration: 0.3 }}
+      whileHover={{ y: -2 }}
+      onClick={onClick}
+      className="group relative cursor-pointer"
+    >
+      {/* 卡片 */}
+      <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-xl overflow-hidden transition-all duration-300 group-hover:border-purple-500/30 group-hover:shadow-lg group-hover:shadow-purple-500/10">
+        {/* 缩略图 */}
+        <div className="aspect-[4/3] relative overflow-hidden">
+          <ProjectThumbnail data={project.data} />
+          
+          {/* 悬浮操作 */}
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full font-medium">
+                  {stats.pageCount || 1} 页
+                </span>
+                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded-full font-medium">
+                  {stats.elementCount} 元素
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* 信息 */}
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-white truncate group-hover:text-purple-300 transition-colors">
+                {project.name}
+              </h3>
+              {project.description && (
+                <p className="text-xs text-gray-500 truncate mt-1">
+                  {project.description}
+                </p>
+              )}
+            </div>
+            
+            {/* 删除按钮 */}
+            <button
+              onClick={onDelete}
+              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+          
+          {/* 底部信息 */}
+          <div className="flex items-center gap-3 mt-3 text-[11px] text-gray-500">
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              <span>{formatDate(project.updatedAt)}</span>
+            </div>
+            <span>·</span>
+            <span>{project._count.versions} 版本</span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// 新手引导组件
+function OnboardingModal({ 
+  step, 
+  onNext, 
+  onSkip 
+}: { 
+  step: number
+  onNext: () => void
+  onSkip: () => void
+}) {
+  const steps = [
+    {
+      icon: Sparkles,
+      title: '欢迎使用 Nexus Design',
+      description: 'AI 驱动的设计即代码平台，让创意瞬间变为现实',
+      gradient: 'from-purple-500 to-pink-500'
+    },
+    {
+      icon: Palette,
+      title: '智能设计生成',
+      description: '用自然语言描述你的想法，AI 自动生成精美界面和多页应用',
+      gradient: 'from-blue-500 to-cyan-500'
+    },
+    {
+      icon: Code2,
+      title: '生产级代码导出',
+      description: '支持 React、Vue、HTML 多框架导出，直接用于生产环境',
+      gradient: 'from-green-500 to-emerald-500'
+    }
+  ]
+
+  const current = steps[step]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="relative bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl"
+      >
+        {/* 关闭按钮 */}
+        <button
+          onClick={onSkip}
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* 进度条 */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {steps.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                i === step ? "w-8 bg-gradient-to-r from-purple-500 to-pink-500" : "w-2 bg-gray-700"
+              )}
+            />
+          ))}
+        </div>
+
+        {/* 内容 */}
+        <div className="text-center">
+          <div className={cn(
+            "w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center",
+            "bg-gradient-to-br",
+            current.gradient
+          )}>
+            <current.icon className="w-10 h-10 text-white" />
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-3">{current.title}</h2>
+          <p className="text-gray-400 leading-relaxed">{current.description}</p>
+        </div>
+
+        {/* 按钮 */}
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onSkip}
+            className="flex-1 px-5 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium transition-colors"
+          >
+            跳过
+          </button>
+          <button
+            onClick={onNext}
+            className={cn(
+              "flex-1 px-5 py-3 rounded-xl font-medium transition-all",
+              "bg-gradient-to-r from-purple-500 to-pink-500",
+              "hover:shadow-lg hover:shadow-purple-500/25",
+              "text-white"
+            )}
+          >
+            {step < steps.length - 1 ? '下一步' : '开始使用'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// 空状态组件
+function EmptyState({ onCreateNew }: { onCreateNew: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="text-center py-20"
+    >
+      <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center mx-auto mb-6">
+        <FolderOpen className="w-12 h-12 text-purple-400" />
+      </div>
+      <h3 className="text-xl font-semibold text-white mb-2">暂无项目</h3>
+      <p className="text-gray-400 mb-8">创建你的第一个设计项目，开始创意之旅</p>
+      <Button
+        onClick={onCreateNew}
+        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg hover:shadow-purple-500/25"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        创建第一个项目
+      </Button>
+    </motion.div>
+  )
+}
+
 function WorkspaceContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { showToast } = useUIStore()
   const { importState } = useEditorStore()
+  
   const [projects, setProjects] = useState<Project[]>([])
-  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'updatedAt' | 'name'>('updatedAt')
-  const [onboardingStep, setOnboardingStep] = useState<number | null>(() => {
+  const [showOnboarding, setShowOnboarding] = useState<number | null>(() => {
     if (typeof window !== 'undefined' && !localStorage.getItem('onboarding_done')) return 0
     return null
   })
@@ -60,7 +411,10 @@ function WorkspaceContent() {
     let result = [...projects]
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      result = result.filter(p => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q))
+      result = result.filter(p => 
+        p.name.toLowerCase().includes(q) || 
+        p.description?.toLowerCase().includes(q)
+      )
     }
     result.sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name)
@@ -69,47 +423,49 @@ function WorkspaceContent() {
     return result
   }, [projects, searchQuery, sortBy])
 
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch('/api/projects')
-      const result = await response.json()
-      if (result.success) {
-        setProjects(result.data)
-      }
-    } catch {
-      showToast('加载项目列表失败', 'error')
-    } finally {
-      setLoadingProjects(false)
-    }
-  }
+    const fetchProjects = useCallback(async () => {
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      fetchProjects()
-    }
-  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+      try {
+
+        const response = await fetch('/api/projects')
+
+        const result = await response.json()
+
+        if (result.success) {
+
+          setProjects(result.data)
+
+        }
+
+      } catch {
+
+        showToast('加载项目列表失败', 'error')
+
+      } finally {
+
+        setLoading(false)
+
+      }
+
+    }, [showToast])
+
+  
+
+  
+
+    useEffect(() => {
+
+      if (status === 'authenticated') {
+
+        fetchProjects()
+
+      }
+
+    }, [status, fetchProjects])
 
   const openProject = (project: Project) => {
-    if (project.data && typeof project.data === 'object') {
-      const data = project.data as Record<string, unknown>
-
-      // 支持多页格式和旧单页格式
-      if (Array.isArray(data.pages)) {
-        importState({
-          pages: data.pages as DesignPage[],
-          activePageId: data.activePageId as string || '',
-          canvas: data.canvas as EditorState['canvas'],
-        })
-      } else {
-        importState({
-          elements: (data.elements as EditorElement[]) || [],
-          canvas: data.canvas as EditorState['canvas'],
-        })
-      }
-
-      localStorage.setItem('currentProjectId', project.id)
-    }
-    router.push('/design/editor')
+    // 直接跳转带项目 ID，让编辑器从数据库加载完整数据
+    router.push(`/design/editor?id=${project.id}`)
   }
 
   const loadExampleProject = () => {
@@ -138,286 +494,192 @@ function WorkspaceContent() {
       if (response.ok) {
         setProjects(projects.filter(p => p.id !== projectId))
         showToast('项目已删除', 'success')
-      } else {
-        showToast('删除失败', 'error')
       }
     } catch {
       showToast('删除失败', 'error')
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return '刚刚'
-    if (diffMins < 60) return `${diffMins} 分钟前`
-    if (diffHours < 24) return `${diffHours} 小时前`
-    if (diffDays < 7) return `${diffDays} 天前`
-    return date.toLocaleDateString('zh-CN')
-  }
-
   if (status === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center bg-dark">
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted">正在加载...</p>
+          <Loader2 className="w-10 h-10 text-purple-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">正在加载...</p>
         </div>
       </div>
     )
   }
 
   if (status === 'unauthenticated') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-dark">
-        <Card className="p-8 max-w-md text-center">
-          <h2 className="text-2xl font-bold mb-4">需要登录</h2>
-          <p className="text-muted mb-6">请先登录以访问工作区</p>
-          <Button onClick={() => router.push('/auth/login')}>
-            前往登录
-          </Button>
-        </Card>
-      </div>
-    )
+    router.push('/auth/login?redirect=/workspace')
+    return null
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-dark via-card to-dark">
+    <div className="min-h-screen bg-[#0a0a0f]">
+      {/* 背景装饰 */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[150px]" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[150px]" />
+      </div>
+
       <Navbar />
 
-      {/* 新手引导 */}
-      {onboardingStep !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-gray-800 rounded-xl p-8 max-w-md w-full mx-4 border border-gray-700">
-            <div className="text-center mb-6">
-              <div className="text-4xl mb-3">
-                {onboardingStep === 0 ? '👋' : onboardingStep === 1 ? '🎨' : '🚀'}
-              </div>
-              <h2 className="text-xl font-bold text-gray-200">
-                {onboardingStep === 0 ? '欢迎使用 Nexus Design！' : onboardingStep === 1 ? 'AI 驱动设计' : '开始创作'}
-              </h2>
-              <p className="text-sm text-gray-400 mt-2">
-                {onboardingStep === 0
-                  ? '这是一个 AI 驱动的设计即代码平台，让我们快速了解核心功能。'
-                  : onboardingStep === 1
-                  ? '输入自然语言描述，AI 会自动生成界面设计。支持多种设备尺寸和设计风格。'
-                  : '在编辑器中可以拖拽组件、编辑属性、导出代码。Ctrl+S 保存，Ctrl+Z 撤销。'}
+      {/* 主内容 */}
+      <div className="relative max-w-7xl mx-auto px-6 py-8">
+        {/* 头部 */}
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-10"
+        >
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-white bg-clip-text text-transparent mb-2">
+                工作区
+              </h1>
+              <p className="text-gray-400">
+                {session?.user?.name ? `欢迎回来，${session.user.name}` : '管理你的设计项目'}
               </p>
             </div>
-
-            <div className="flex items-center justify-center space-x-2 mb-6">
-              {[0, 1, 2].map((step) => (
-                <div
-                  key={step}
-                  className={`w-2 h-2 rounded-full ${
-                    step === onboardingStep ? 'bg-purple-500' : 'bg-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  localStorage.setItem('onboarding_done', 'true')
-                  setOnboardingStep(null)
-                }}
-                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
-              >
-                跳过
-              </button>
-              <button
-                onClick={() => {
-                  if (onboardingStep < 2) {
-                    setOnboardingStep(onboardingStep + 1)
-                  } else {
-                    localStorage.setItem('onboarding_done', 'true')
-                    setOnboardingStep(null)
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm text-white transition-colors"
-              >
-                {onboardingStep < 2 ? '下一步' : '开始使用'}
-              </button>
-            </div>
+            <Button
+              onClick={() => router.push('/design/editor')}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg hover:shadow-purple-500/25"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              新建项目
+            </Button>
           </div>
-        </div>
-      )}
+        </motion.header>
 
-      <div className="flex">
-        <Sidebar />
-        <div className="flex-1 max-w-6xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              设计工作区
-            </h1>
-            <p className="text-muted mt-2">
-              {session?.user?.name ? `欢迎回来，${session.user.name}` : '开始创建您的设计项目'}
-            </p>
+        {/* 快速操作 */}
+        <section className="mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <QuickActionCard
+              icon={Sparkles}
+              title="AI 智能生成"
+              description="用自然语言描述你的想法，AI 自动生成完整的多页应用界面"
+              gradient="from-purple-500 to-pink-500"
+              onClick={() => router.push('/design/editor')}
+              delay={0.1}
+            />
+            <QuickActionCard
+              icon={LayoutTemplate}
+              title="空白画布"
+              description="从零开始创作，使用可视化编辑器自由设计你的创意"
+              gradient="from-blue-500 to-cyan-500"
+              onClick={() => router.push('/design/editor')}
+              delay={0.2}
+            />
+            <QuickActionCard
+              icon={FolderOpen}
+              title="示例项目"
+              description="加载金融 App 示例，快速了解编辑器的强大功能"
+              gradient="from-green-500 to-emerald-500"
+              onClick={loadExampleProject}
+              delay={0.3}
+            />
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary">导入项目</Button>
-            <Button onClick={() => router.push('/design/ai')}>新建项目</Button>
-          </div>
-        </div>
+        </section>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <Card
-            className="hover:shadow-lg transition-shadow cursor-pointer hover:border-purple-500/30"
-            onClick={() => router.push('/design/ai')}
-          >
-            <CardHeader>
-              <CardTitle>快速开始</CardTitle>
-              <CardDescription>使用 AI 生成界面</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted mb-4">
-                输入描述，AI 帮您生成设计
-              </p>
-              <Button className="w-full" variant="primary">立即尝试</Button>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="hover:shadow-lg transition-shadow cursor-pointer hover:border-blue-500/30"
-            onClick={() => router.push('/design/editor')}
-          >
-            <CardHeader>
-              <CardTitle>空白画布</CardTitle>
-              <CardDescription>从零开始设计</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted mb-4">
-                使用可视化编辑器自由创作
-              </p>
-              <Button className="w-full" variant="secondary">打开编辑器</Button>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="hover:shadow-lg transition-shadow cursor-pointer hover:border-green-500/30"
-            onClick={loadExampleProject}
-          >
-            <CardHeader>
-              <CardTitle>示例项目</CardTitle>
-              <CardDescription>加载演示数据</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted mb-4">
-                加载金融 App 示例设计
-              </p>
-              <Button className="w-full" variant="outline">加载示例</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Projects */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>最近项目</CardTitle>
-                <CardDescription>您最近编辑的设计项目</CardDescription>
-              </div>
+        {/* 项目列表 */}
+        <section>
+          {/* 工具栏 */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-gray-500" />
+              最近项目
               {projects.length > 0 && (
-                <div className="flex items-center space-x-2">
+                <span className="text-sm font-normal text-gray-500">
+                  ({projects.length})
+                </span>
+              )}
+            </h2>
+            
+            {projects.length > 0 && (
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* 搜索框 */}
+                <div className="relative flex-1 sm:flex-initial">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                   <input
                     type="text"
                     placeholder="搜索项目..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-3 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-md focus:outline-none focus:border-primary text-gray-200 w-40"
+                    className="w-full sm:w-64 pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                   />
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'name')}
-                    className="px-2 py-1.5 text-xs bg-gray-800 border border-gray-700 rounded-md focus:outline-none text-gray-200"
-                  >
-                    <option value="updatedAt">按时间</option>
-                    <option value="name">按名称</option>
-                  </select>
                 </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingProjects ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted text-sm">加载中...</p>
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-4xl mb-4">📂</div>
-                <p className="text-muted font-medium">暂无项目</p>
-                <p className="text-sm text-gray-500 mt-2 mb-6">创建您的第一个设计项目</p>
-                <Button onClick={() => router.push('/design/ai')}>
-                  创建第一个项目
-                </Button>
-              </div>
-            ) : filteredProjects.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted text-sm">未找到匹配的项目</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredProjects.map((project) => {
-                  const stats = getProjectStats(project.data)
-
-                  return (
-                    <div
-                      key={project.id}
-                      onClick={() => openProject(project)}
-                      className="group p-4 bg-gray-800/50 rounded-lg border border-gray-700 hover:border-primary/30 cursor-pointer transition-all"
-                    >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-gray-200 truncate">
-                          {project.name}
-                        </h3>
-                        {project.description && (
-                          <p className="text-xs text-gray-500 truncate mt-1">
-                            {project.description}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => deleteProject(e, project.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-all"
-                        title="删除项目"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                      </button>
-                    </div>
-                    <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-400">
-                      <span className="rounded-full bg-gray-900/70 px-2 py-0.5">
-                        {stats.pageCount || 1} 页
-                      </span>
-                      <span className="rounded-full bg-gray-900/70 px-2 py-0.5">
-                        {stats.elementCount} 元素
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{formatDate(project.updatedAt)}</span>
-                      <span>{project._count.versions} 个版本</span>
-                    </div>
-                    </div>
-                  )
-                })}
+                
+                {/* 排序 */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'name')}
+                  className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-purple-500/50 cursor-pointer"
+                >
+                  <option value="updatedAt">按时间</option>
+                  <option value="name">按名称</option>
+                </select>
               </div>
             )}
-          </CardContent>
-        </Card>
-        </div>
+          </div>
+
+          {/* 项目网格 */}
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-[4/3] bg-gray-800/50 rounded-xl mb-3" />
+                  <div className="h-4 bg-gray-800/50 rounded w-3/4 mb-2" />
+                  <div className="h-3 bg-gray-800/50 rounded w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
+            <EmptyState onCreateNew={() => router.push('/design/editor')} />
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-16">
+              <Search className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">未找到匹配的项目</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <AnimatePresence>
+                {filteredProjects.map((project, index) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    index={index}
+                    onClick={() => openProject(project)}
+                    onDelete={(e) => deleteProject(e, project.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
       </div>
+
+      {/* 新手引导 */}
+      <AnimatePresence>
+        {showOnboarding !== null && (
+          <OnboardingModal
+            step={showOnboarding}
+            onNext={() => {
+              if (showOnboarding < 2) {
+                setShowOnboarding(showOnboarding + 1)
+              } else {
+                localStorage.setItem('onboarding_done', 'true')
+                setShowOnboarding(null)
+              }
+            }}
+            onSkip={() => {
+              localStorage.setItem('onboarding_done', 'true')
+              setShowOnboarding(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
