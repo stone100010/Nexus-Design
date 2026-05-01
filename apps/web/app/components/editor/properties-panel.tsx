@@ -42,6 +42,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
   )
   const selectedElement = elements.find(el => selectedElementIds.includes(el.id))
 
+  // 安全检查：确保选中的元素存在且有效
+  const isValidElement = selectedElement && selectedElement.id && selectedElement.type
+
   // Form state
   const [formData, setFormData] = useState({
     x: 0,
@@ -87,7 +90,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
   }, [selectedElement])
 
   const handleUpdate = (field: string, value: string | number, isStyle: boolean = false) => {
-    if (!selectedElement) return
+    if (!isValidElement) return
 
     if (isStyle) {
       const newStyles = { ...selectedElement.styles, [field]: value }
@@ -112,14 +115,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
   }
 
   const handleDuplicate = () => {
-    if (!selectedElement) return
+    if (!isValidElement) return
     
     duplicateElement(selectedElement.id)
     showToast('元素已复制', 'success')
   }
 
   const handleZIndexChange = (direction: 'front' | 'back') => {
-    if (!selectedElement) return
+    if (!isValidElement) return
 
     if (direction === 'front') {
       bringToFront(selectedElement.id)
@@ -131,7 +134,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
   }
 
   const handleSaveAsComponent = () => {
-    if (!selectedElement) return
+    if (!isValidElement) return
 
     const savedComponents = JSON.parse(localStorage.getItem('custom_components') || '[]')
     const newComponent = {
@@ -208,7 +211,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
     </div>
   )
 
-  if (!selectedElement) {
+  if (!isValidElement) {
     return (
       <div className={cn(
         'flex flex-col items-center justify-center p-6 text-center',
@@ -257,7 +260,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
           </div>
         </div>
         <div className="text-xs text-gray-500">
-          {selectedElement.type} · ID: {selectedElement.id.slice(-6)}
+          {selectedElement.type} · ID: {selectedElement.id?.slice(-6) ?? 'unknown'}
         </div>
       </div>
 
@@ -415,7 +418,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">ID</span>
-                <span className="font-mono text-gray-200 text-[10px]">{selectedElement.id}</span>
+                <span className="font-mono text-gray-200 text-[10px]">{selectedElement.id ?? 'unknown'}</span>
               </div>
             </div>
 

@@ -1,15 +1,18 @@
 'use client'
 
-import { Maximize2, Plus, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Loader2, Maximize2, Plus, ZoomIn, ZoomOut } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/stores/editor'
 import { useUIStore } from '@/stores/ui'
 import { EditorElement } from '@/types'
 
-const EMPTY_ELEMENTS: EditorElement[] = []
+const COLS = 4
+const PAGE_GAP = 40
+const PAGE_LABEL_HEIGHT = 28
+
+type PagePosition = { id: string; x: number; y: number }
 
 // Memoized element renderer
 const CanvasElement = React.memo<{
@@ -116,17 +119,17 @@ export const Canvas: React.FC<CanvasProps> = ({
     activePageId,
     setActivePage,
     addPage,
+    isSaving,
   } = useEditorStore()
 
-  const elements = useEditorStore(
+  const activePage = useEditorStore(
     useCallback(
-      (state) => state.pages.find(page => page.id === state.activePageId)?.elements ?? EMPTY_ELEMENTS,
+      (state) => state.pages.find(page => page.id === state.activePageId),
       []
     )
   )
 
   const { showToast } = useUIStore()
-  const router = useRouter()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [canvasPosition, setCanvasPosition] = useState({ x: 0, y: 0 })
@@ -137,16 +140,40 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const gridSize = 20
 
-  // 初始居中画布
+  // 计算画布总尺寸（所有页面排列后的总宽高）
+  const canvasTotalWidth = useMemo(() => {
+    const cols = Math.min(COLS, pages.length || 1)
+    const pageW = canvas.width
+    return cols * pageW + (cols + 1) * PAGE_GAP
+  }, [pages.length, canvas.width])
+
+  const canvasTotalHeight = useMemo(() => {
+    const rows = Math.ceil((pages.length || 1) / COLS)
+    const pageH = canvas.height
+    return rows * pageH + (rows + 1) * PAGE_GAP + rows * PAGE_LABEL_HEIGHT
+  }, [pages.length, canvas.height])
+
+  // 计算每个页面在画布上的偏移位置
+  const pagePositions: PagePosition[] = useMemo(() => {
+    return pages.map((page, index) => {
+      const row = Math.floor(index / COLS)
+      const col = index % COLS
+      const x = PAGE_GAP + col * (canvas.width + PAGE_GAP)
+      const y = PAGE_GAP + row * (canvas.height + PAGE_GAP + PAGE_LABEL_HEIGHT)
+      return { id: page.id, x, y }
+    })
+  }, [pages, canvas.width, canvas.height])
+
+  // 初始居中
   useEffect(() => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
       setCanvasPosition({
-        x: (rect.width - canvas.width * canvas.zoom) / 2,
-        y: (rect.height - canvas.height * canvas.zoom) / 2
+        x: (rect.width - canvasTotalWidth * canvas.zoom) / 2,
+        y: (rect.height - canvasTotalHeight * canvas.zoom) / 2
       })
     }
-  }, [canvas.width, canvas.height, canvas.zoom])
+  }, [canvasTotalWidth, canvasTotalHeight, canvas.zoom])
 
   // 添加新页面
   const handleAddPage = useCallback(() => {
@@ -164,7 +191,6 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // 右键拖拽平移画布
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    // 右键 = 平移画布
     if (e.button === 2) {
       e.preventDefault()
       setIsPanning(true)
@@ -175,7 +201,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       return
     }
 
-    // 左键点击空白区域 = 清除选中
     if (e.button === 0 && e.target === e.currentTarget) {
       clearSelection()
     }
@@ -213,23 +238,26 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsDraggingElement(false)
   }, [isDraggingElement])
 
-  // 禁用右键菜单
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
   }, [])
 
   // 双击添加元素
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    if (e.target !== containerRef.current) return
-
+    if (!activePage || !containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
-    const x = (e.clientX - rect.left - canvasPosition.x) / canvas.zoom
-    const y = (e.clientY - rect.top - canvasPosition.y) / canvas.zoom
+    const pos = pagePositions.find(p => p.id === activePageId)
+    if (!pos) return
+
+    const canvasX = (e.clientX - rect.left - canvasPosition.x) / canvas.zoom - pos.x
+    const canvasY = (e.clientY - rect.top - canvasPosition.y) / canvas.zoom - pos.y
+
+    if (canvasX < 0 || canvasY < 0 || canvasX > canvas.width || canvasY > canvas.height) return
 
     const newElement = {
       type: 'button' as const,
-      x,
-      y,
+      x: canvasX,
+      y: canvasY,
       width: 120,
       height: 40,
       props: { text: '按钮' },
@@ -249,23 +277,26 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     showToast('元素已添加', 'success')
-  }, [canvasPosition, canvas.zoom, addElement, selectElement, onElementAdd, showToast])
+  }, [canvasPosition, canvas.zoom, canvas.width, canvas.height, activePage, activePageId, pagePositions, addElement, selectElement, onElementAdd, showToast])
 
   // 元素拖拽
   const handleElementMouseDown = useCallback((e: React.MouseEvent, element: EditorElement) => {
     e.stopPropagation()
-    if (e.button !== 0) return // 只响应左键
+    if (e.button !== 0) return
 
     selectElement(element.id)
 
     setIsDraggingElement(true)
+    const pos = pagePositions.find(p => p.id === activePageId)
+    const offsetX = pos ? pos.x : 0
+    const offsetY = pos ? pos.y : 0
     dragStart.current = {
-      x: e.clientX - element.x * canvas.zoom,
-      y: e.clientY - element.y * canvas.zoom
+      x: e.clientX - (element.x + offsetX) * canvas.zoom,
+      y: e.clientY - (element.y + offsetY) * canvas.zoom
     }
-  }, [selectElement, canvas.zoom])
+  }, [selectElement, canvas.zoom, activePageId, pagePositions])
 
-  // 滚轮缩放（不需要 Ctrl）
+  // 滚轮缩放
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
 
@@ -275,14 +306,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
-    // 鼠标在画布坐标中的位置（缩放前）
     const canvasX = (mouseX - canvasPosition.x) / canvas.zoom
     const canvasY = (mouseY - canvasPosition.y) / canvas.zoom
 
     const delta = e.deltaY > 0 ? -0.1 : 0.1
     const newZoom = Math.max(0.1, Math.min(3, canvas.zoom + delta))
 
-    // 缩放后重新计算位置，使鼠标下的点不变
     setCanvasPosition({
       x: mouseX - canvasX * newZoom,
       y: mouseY - canvasY * newZoom
@@ -291,16 +320,15 @@ export const Canvas: React.FC<CanvasProps> = ({
     setZoom(newZoom)
   }, [canvasPosition, canvas.zoom, setZoom])
 
-  // 重置视图（居中画布）
   const handleResetView = useCallback(() => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
       setCanvasPosition({
-        x: (rect.width - canvas.width * canvas.zoom) / 2,
-        y: (rect.height - canvas.height * canvas.zoom) / 2
+        x: (rect.width - canvasTotalWidth * canvas.zoom) / 2,
+        y: (rect.height - canvasTotalHeight * canvas.zoom) / 2
       })
     }
-  }, [canvas.width, canvas.height, canvas.zoom])
+  }, [canvasTotalWidth, canvasTotalHeight, canvas.zoom])
 
   const handleZoomIn = () => setZoom(Math.min(canvas.zoom + 0.1, 3))
   const handleZoomOut = () => setZoom(Math.max(canvas.zoom - 0.1, 0.1))
@@ -347,8 +375,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
 
-      const x = (e.clientX - rect.left - canvasPosition.x) / canvas.zoom - component.defaultSize.width / 2
-      const y = (e.clientY - rect.top - canvasPosition.y) / canvas.zoom - component.defaultSize.height / 2
+      const pos = pagePositions.find(p => p.id === activePageId)
+      const offsetX = pos ? pos.x : 0
+      const offsetY = pos ? pos.y : 0
+
+      const x = (e.clientX - rect.left - canvasPosition.x) / canvas.zoom - offsetX - component.defaultSize.width / 2
+      const y = (e.clientY - rect.top - canvasPosition.y) / canvas.zoom - offsetY - component.defaultSize.height / 2
 
       addElement({
         type: component.type,
@@ -384,52 +416,45 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* 页面标签栏 */}
-      {pages.length > 0 && (
-        <div className="absolute top-0 left-0 right-0 z-10 bg-gray-800/90 backdrop-blur border-b border-gray-700">
-          <div className="flex items-center h-9 px-2 overflow-x-auto scrollbar-hide">
-            {pages.map((page) => (
-              <button
-                key={page.id}
-                onClick={() => {
-                  setActivePage(page.id)
-                  // 切换页面时居中画布
-                  setTimeout(() => {
-                    if (containerRef.current) {
-                      const rect = containerRef.current.getBoundingClientRect()
-                      setCanvasPosition({
-                        x: (rect.width - page.canvas.width * canvas.zoom) / 2,
-                        y: (rect.height - page.canvas.height * canvas.zoom) / 2
-                      })
-                    }
-                  }, 0)
-                }}
-                className={cn(
-                  'flex-shrink-0 px-3 py-1 text-xs rounded-md transition-colors mr-1',
-                  page.id === activePageId
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-gray-300'
-                )}
-              >
-                {page.name}
-              </button>
-            ))}
+      {/* 左上角：页面列表 */}
+      <div className="absolute top-4 left-4 z-10 bg-gray-800/90 backdrop-blur rounded-lg p-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="text-xs text-gray-500 mb-2 px-1">页面列表</div>
+        <div className="flex flex-col gap-1">
+          {pages.map((page) => (
             <button
-              onClick={handleAddPage}
-              className="flex-shrink-0 p-1 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded transition-colors"
-              title="添加页面"
+              key={page.id}
+              onClick={() => {
+                setActivePage(page.id)
+                // 居中显示该页面，100% 缩放
+                const pos = pagePositions.find(p => p.id === page.id)
+                if (pos && containerRef.current) {
+                  const rect = containerRef.current.getBoundingClientRect()
+                  setCanvasPosition({
+                    x: rect.width / 2 - (pos.x + canvas.width / 2),
+                    y: rect.height / 2 - (pos.y + canvas.height / 2 + PAGE_LABEL_HEIGHT / 2),
+                  })
+                  setZoom(1)
+                }
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded text-xs text-left transition-all',
+                page.id === activePageId
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+              )}
             >
-              <Plus size={14} />
+              <span className="font-medium">{page.name}</span>
+              <span className="text-gray-500 ml-2">{page.elements?.length || 0}元素</span>
             </button>
-          </div>
+          ))}
+          {pages.length === 0 && (
+            <div className="text-xs text-gray-500 px-3 py-1.5">暂无页面</div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* 工具栏 */}
-      <div className={cn(
-        'absolute left-1/2 -translate-x-1/2 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2',
-        pages.length > 0 ? 'top-11' : 'top-4'
-      )}>
+      {/* 工具栏 - 居中 */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-2 bg-gray-800/90 backdrop-blur rounded-lg p-2">
         <button onClick={handleZoomOut} className="p-1.5 hover:bg-gray-700 rounded" title="缩小">
           <ZoomOut size={16} />
         </button>
@@ -443,22 +468,31 @@ export const Canvas: React.FC<CanvasProps> = ({
         <button onClick={handleResetView} className="p-1.5 hover:bg-gray-700 rounded" title="居中画布">
           <Maximize2 size={16} />
         </button>
+        <div className="w-px h-4 bg-gray-600 mx-1" />
+        <button onClick={handleAddPage} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1" title="添加页面">
+          <Plus size={16} />
+          <span className="text-xs text-gray-300">添加页面</span>
+        </button>
       </div>
 
-      {/* 状态栏 */}
-      <div className={cn(
-        'absolute right-4 z-10 bg-gray-800/90 backdrop-blur rounded-lg px-3 py-2 text-xs text-gray-300',
-        pages.length > 0 ? 'top-11' : 'top-4'
-      )}>
-        <div className="flex items-center space-x-2">
-          <div className={cn('w-2 h-2 rounded-full', isPanning ? 'bg-yellow-400' : 'bg-green-400')} />
-          <span>{isPanning ? '平移中' : '就绪'}</span>
+      {/* 右上角：状态logo */}
+      <div className="absolute top-4 right-4 z-10 bg-gray-800/90 backdrop-blur rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2">
+          {isSaving ? (
+            <>
+              <Loader2 size={14} className="text-blue-400 animate-spin" />
+              <span className="text-xs text-blue-400">保存中</span>
+            </>
+          ) : (
+            <>
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-gray-400">就绪</span>
+            </>
+          )}
         </div>
-        <div className="mt-1 text-gray-500">{elements.length} 个元素</div>
-        <div className="mt-0.5 text-gray-600">右键拖拽画布 · 滚轮缩放</div>
       </div>
 
-      {/* 无限画布 */}
+      {/* 无限画布 - 所有页面并排展示 */}
       <div
         className="absolute"
         style={{
@@ -466,67 +500,100 @@ export const Canvas: React.FC<CanvasProps> = ({
           transformOrigin: '0 0',
         }}
       >
-        {/* 网格 - 覆盖画布区域 */}
+        {/* 网格背景 */}
         <div
           style={{
             position: 'absolute',
-            left: -1000,
-            top: -1000,
-            width: canvas.width + 2000,
-            height: canvas.height + 2000,
+            left: -2000,
+            top: -2000,
+            width: canvasTotalWidth + 4000,
+            height: canvasTotalHeight + 4000,
             backgroundImage: `
               linear-gradient(to right, #4b5563 1px, transparent 1px),
               linear-gradient(to bottom, #4b5563 1px, transparent 1px)
             `,
             backgroundSize: `${gridSize}px ${gridSize}px`,
-            opacity: 0.15,
+            opacity: 0.1,
             pointerEvents: 'none'
           }}
         />
 
-        {/* 画布边界 */}
-        <div
-          className="absolute border-2 border-dashed border-gray-600 bg-gray-800/5"
-          style={{
-            width: canvas.width,
-            height: canvas.height,
-            left: 0,
-            top: 0
-          }}
-        />
+        {/* 渲染每个页面 */}
+        {pages.map((page, pageIndex) => {
+          const pos = pagePositions[pageIndex]
+          const isActive = page.id === activePageId
 
-        {/* 渲染元素 */}
-        {elements.map((element) => (
-          <CanvasElement
-            key={element.id}
-            element={element}
-            isSelected={selectedElementIds.includes(element.id)}
-            onMouseDown={handleElementMouseDown}
-          />
-        ))}
+          return (
+            <div key={page.id} style={{ position: 'absolute', left: pos.x, top: pos.y }}>
+              {/* 页面标签 */}
+              <div
+                className={cn(
+                  'text-xs font-medium mb-1 px-2 py-0.5 rounded-t-md inline-block cursor-pointer',
+                  isActive
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                )}
+                onClick={() => setActivePage(page.id)}
+              >
+                {page.name}
+              </div>
 
-        {/* 空状态 */}
-        {elements.length === 0 && (
+              {/* 页面画布 */}
+              <div
+                className={cn(
+                  'relative overflow-hidden transition-all',
+                  isActive
+                    ? 'border-2 border-purple-500 shadow-lg shadow-purple-500/20'
+                    : 'border border-gray-600 hover:border-gray-400'
+                )}
+                style={{
+                  width: page.canvas.width,
+                  height: page.canvas.height,
+                  background: '#0f0c29',
+                }}
+                onClick={() => setActivePage(page.id)}
+              >
+                {/* 页面元素 */}
+                {page.elements.map((element) => (
+                  <CanvasElement
+                    key={element.id}
+                    element={element}
+                    isSelected={isActive && selectedElementIds.includes(element.id)}
+                    onMouseDown={(e) => {
+                      if (!isActive) {
+                        setActivePage(page.id)
+                      }
+                      handleElementMouseDown(e, element)
+                    }}
+                  />
+                ))}
+
+                {/* 空页面提示 */}
+                {page.elements.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-gray-600 text-xs">双击添加元素</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* 无页面空状态 */}
+        {pages.length === 0 && (
           <div
             className="absolute flex items-center justify-center pointer-events-none"
             style={{
               width: canvas.width,
               height: canvas.height,
-              left: 0,
-              top: 0
+              left: PAGE_GAP,
+              top: PAGE_GAP,
             }}
           >
             <div className="text-gray-500 text-center">
               <div className="text-4xl mb-2">🎨</div>
               <div className="text-sm">双击画布添加元素</div>
-              <div className="text-xs text-gray-600 mt-1">或从左侧组件库拖拽</div>
-              <button
-                onClick={() => router.push('/design/ai')}
-                className="pointer-events-auto mt-4 flex items-center space-x-2 mx-auto px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 rounded-lg text-purple-400 text-xs transition-colors"
-              >
-                <Sparkles size={14} />
-                <span>从 AI 生成</span>
-              </button>
+              <div className="text-xs text-gray-600 mt-1">或从左侧组件库拖拽，或在底部输入框使用 AI 生成</div>
             </div>
           </div>
         )}
