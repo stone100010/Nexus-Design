@@ -136,9 +136,9 @@ function parseCompletePages(content: string) {
 }
 
 // 系统提示词 - 多页 APP UI 设计（JSON 输出）
-const SYSTEM_PROMPT = `你是顶级 APP UI/UX 设计专家。根据用户描述生成完整 APP 多页设计方案。
+const SYSTEM_PROMPT = `你是 APP UI/UX 设计代码生成器。你必须立即输出 JSON，不要做任何分析、推理或解释。
 
-只返回纯 JSON，不要任何解释文字。不要用 \`\`\`json 包裹。
+严格只返回纯 JSON 对象，不要包含任何其他文字、注释、markdown 代码块标记。
 
 JSON 格式：
 {
@@ -165,17 +165,17 @@ JSON 格式：
   ]
 }
 
-设计规范（严格遵守）：
-1. 生成 3 个核心页面，覆盖 APP 主要功能流
-2. 玻璃拟态风格：半透明卡片 rgba(255,255,255,0.08)
-3. 配色：背景 #0f0c29，卡片 rgba(255,255,255,0.08)，边框 rgba(255,255,255,0.12)
-4. 每个页面必须有：
-   - 顶部状态栏 (y=0, h=44)：左"9:41"，右信号电池
-   - 底部标签栏 (y=729, h=83)：4个tab
-   - 中间内容区：标题、卡片、按钮
-5. 每个页面 6-8 个元素（不要太多）
-6. 所有文字用中文，图片用 https://picsum.photos/宽/高
-7. 元素不溢出画布`
+设计规范：
+1. 必须生成 5-6 个页面，覆盖 APP 完整功能流（启动页、登录页、首页、列表页、详情页、个人中心等）
+2. 配色：背景 #0f0c29，卡片 rgba(255,255,255,0.08)，边框 rgba(255,255,255,0.12)
+3. 每个页面必须有：
+   - 顶部状态栏 (y=0, h=44)：左"9:41"，右信号电池图标
+   - 底部标签栏 (y=729, h=83)：4个tab按钮
+   - 中间内容区
+4. 每个页面 5-8 个元素（不要太多）
+5. 所有文字用中文，图片用 https://picsum.photos/宽/高
+6. 元素不溢出画布
+7. 直接输出 JSON，不要任何分析推理`
 
 export async function POST(request: NextRequest) {
   try {
@@ -236,8 +236,8 @@ export async function POST(request: NextRequest) {
       const aiUrl = `${aiConfig.baseURL}/chat/completions`
       const aiKey = aiConfig.apiKey
       const aiModel = aiConfig.model
-      const firstPageTimeoutMs = Number.parseInt(process.env.AI_FIRST_PAGE_TIMEOUT_MS || '90000', 10)
-      const streamTimeoutMs = Number.parseInt(process.env.AI_STREAM_TIMEOUT_MS || '300000', 10)
+      const firstPageTimeoutMs = Number.parseInt(process.env.AI_FIRST_PAGE_TIMEOUT_MS || '180000', 10)
+      const streamTimeoutMs = Number.parseInt(process.env.AI_STREAM_TIMEOUT_MS || '600000', 10)
 
       const encoder = new TextEncoder()
       let contentBuffer = ''
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
                   { role: 'user', content: prompt }
                 ],
                 temperature: 0.7,
-                max_tokens: 16000,
+                max_tokens: 32000,
                 stream: true,
               }),
             })
